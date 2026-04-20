@@ -48,12 +48,12 @@ def resolve_instrument_token(instruments: object, symbol: str) -> int:
         return 0
     s = symbol.strip().upper()
     candidates: list[str] = []
-    if ":" in symbol:
-        candidates.append(symbol)
+    if ":" in s:
+        candidates.append(s)
     candidates.extend(SYMBOL_ALIASES.get(s, []))
     # Generic fallbacks for constituents like ``RELIANCE``.
-    candidates.append(f"NSE:{symbol}")
-    candidates.append(symbol)
+    candidates.append(f"NSE:{s}")
+    candidates.append(s)
     seen: set[str] = set()
     for key in candidates:
         if key in seen:

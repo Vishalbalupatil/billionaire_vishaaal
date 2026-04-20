@@ -42,6 +42,9 @@ def test_constituent_equity_falls_back_to_nse_prefix() -> None:
     """Equities like ``RELIANCE`` still resolve without an alias."""
     master = _FakeInstruments({"NSE:RELIANCE": _inst(738561, "RELIANCE")})
     assert resolve_instrument_token(master, "RELIANCE") == 738561
+    # Lowercase / whitespace input must be normalised before lookup.
+    assert resolve_instrument_token(master, "reliance") == 738561
+    assert resolve_instrument_token(master, " RELIANCE ") == 738561
 
 
 def test_explicit_exchange_prefix_is_honoured() -> None:
