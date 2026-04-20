@@ -25,6 +25,46 @@ from billionaire.runtime import get_runtime
 from billionaire.strategy.forecaster import forecast as _forecast
 from billionaire.strategy.forecaster import synthetic_closes
 
+# Short-name → `{exchange}:{tradingsymbol}` aliases used by ``/api/forecast``.
+# The InstrumentMaster indexes instruments as ``NSE:NIFTY 50`` (the Zerodha
+# tradingsymbol for the index), but the UI and ``AskAI`` panel reference the
+# index as the short ``"NIFTY"``. Without this map ``by_symbol("NSE:NIFTY")``
+# always misses and the forecast endpoint serves synthetic data forever.
+SYMBOL_ALIASES: dict[str, list[str]] = {
+    "NIFTY":    ["NSE:NIFTY 50"],
+    "NIFTY50":  ["NSE:NIFTY 50"],
+    "NIFTY 50": ["NSE:NIFTY 50"],
+}
+
+
+def resolve_instrument_token(instruments: object, symbol: str) -> int:
+    """Best-effort map ``symbol`` → instrument_token via a small alias table.
+
+    Returns ``0`` if the symbol cannot be resolved. ``instruments`` is an
+    :class:`~billionaire.marketdata.InstrumentMaster` but typed as ``object``
+    here to avoid a circular import.
+    """
+    if instruments is None:
+        return 0
+    s = symbol.strip().upper()
+    candidates: list[str] = []
+    if ":" in symbol:
+        candidates.append(symbol)
+    candidates.extend(SYMBOL_ALIASES.get(s, []))
+    # Generic fallbacks for constituents like ``RELIANCE``.
+    candidates.append(f"NSE:{symbol}")
+    candidates.append(symbol)
+    seen: set[str] = set()
+    for key in candidates:
+        if key in seen:
+            continue
+        seen.add(key)
+        inst = instruments.by_symbol(key)  # type: ignore[attr-defined]
+        if inst is not None:
+            return int(inst.instrument_token)
+    return 0
+
+
 # Nifty 50 universe, surfaced by /api/universe so the UI can render the
 # watchlist without hard-coding it on the frontend.
 NIFTY50_EQUITIES: list[str] = [
@@ -227,11 +267,7 @@ def build_router() -> APIRouter:
         r = get_runtime()
         closes: list[float] = []
         source = "synthetic"
-        inst_token = 0
-        if r.instruments is not None:
-            inst = r.instruments.by_symbol(f"NSE:{symbol}") or r.instruments.by_symbol(symbol)
-            if inst is not None:
-                inst_token = inst.instrument_token
+        inst_token = resolve_instrument_token(r.instruments, symbol)
         # Pull recent completed 1m candles from the builder's ring buffer.
         if inst_token:
             recent = r.candle_builder.recent_candles(inst_token, "1m", n=120)
