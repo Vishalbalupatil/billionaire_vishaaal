@@ -359,3 +359,159 @@ td.mono { font-family: "JetBrains Mono", monospace; }
   100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
 }
 .dot.green, .dot.red, .dot.amber { animation: pulse 2.2s infinite; }
+
+/* =========================================================================
+   Shared building blocks for the redesigned views
+   (Positions / Trades / Signals / RiskMonitor / Alerts / OptionChain / Backtest).
+   ========================================================================= */
+
+/* Hoverable table rows, used in Positions / Trades / Signals. */
+table.glow-rows tbody tr {
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+table.glow-rows tbody tr:hover {
+  background: linear-gradient(90deg, rgba(57,227,255,0.06), rgba(160,107,255,0.04));
+  box-shadow: inset 0 0 0 1px rgba(57,227,255,0.15);
+}
+
+/* Segmented control (pill row of buttons). */
+.segmented {
+  display: inline-flex; gap: 4px; padding: 4px;
+  border: var(--hairline); border-radius: 999px;
+  background: rgba(255,255,255,0.02);
+}
+.segmented button {
+  border: none; background: transparent; color: var(--muted);
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+.segmented button.active {
+  color: var(--text);
+  background: linear-gradient(90deg, rgba(57,227,255,0.14), rgba(160,107,255,0.10));
+  box-shadow: var(--glow-soft);
+}
+
+/* Chip (severity / kind / tag). Used across Alerts, Signals, OptionChain. */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px; border-radius: 6px;
+  font-family: "JetBrains Mono", monospace; font-size: 10px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+}
+.chip.cyan   { color: var(--neon-cyan);   border-color: rgba(57,227,255,0.35);  background: rgba(57,227,255,0.06); }
+.chip.green  { color: var(--neon-green);  border-color: rgba(107,255,158,0.35); background: rgba(107,255,158,0.06); }
+.chip.red    { color: var(--neon-red);    border-color: rgba(255,84,116,0.35);  background: rgba(255,84,116,0.06); }
+.chip.amber  { color: var(--neon-amber);  border-color: rgba(255,211,107,0.35); background: rgba(255,211,107,0.06); }
+.chip.purple { color: var(--neon-purple); border-color: rgba(160,107,255,0.35); background: rgba(160,107,255,0.06); }
+.chip.pink   { color: var(--neon-pink);   border-color: rgba(255,79,163,0.35);  background: rgba(255,79,163,0.06); }
+
+/* Circular progress ring used on RiskMonitor / Backtest. */
+.ring-wrap { position: relative; width: 160px; height: 160px; }
+.ring-wrap .ring-label {
+  position: absolute; inset: 0;
+  display: grid; place-items: center; text-align: center;
+}
+.ring-wrap .ring-label .big {
+  font-family: "Orbitron", sans-serif; font-size: 28px; font-weight: 700;
+  letter-spacing: 0.06em; color: var(--text);
+}
+.ring-wrap .ring-label .sub {
+  color: var(--muted); font-size: 10px; letter-spacing: 0.22em;
+  text-transform: uppercase; margin-top: 2px;
+}
+
+/* Activity timeline (Alerts view + Trades order log). */
+.timeline { position: relative; padding-left: 24px; }
+.timeline::before {
+  content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px;
+  width: 1px; background: linear-gradient(180deg, var(--neon-cyan), transparent);
+  opacity: 0.35;
+}
+.timeline .item { position: relative; padding: 8px 0; }
+.timeline .item::before {
+  content: ""; position: absolute; left: -21px; top: 14px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan);
+}
+.timeline .item.warn::before  { background: var(--neon-amber); box-shadow: 0 0 10px var(--neon-amber); }
+.timeline .item.err::before   { background: var(--neon-red);   box-shadow: 0 0 10px var(--neon-red); }
+.timeline .item.ok::before    { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
+.timeline .item.pink::before  { background: var(--neon-pink);  box-shadow: 0 0 10px var(--neon-pink); }
+.timeline .item .ts { color: var(--neon-cyan); font-family: "JetBrains Mono", monospace; font-size: 11px; margin-right: 8px; }
+.timeline .item .msg { color: var(--text); font-size: 13px; }
+.timeline .item .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+/* Empty-state placeholder — soft glow box with an icon spot. */
+.empty-state {
+  display: grid; place-items: center; gap: 6px;
+  padding: 32px 16px; border: 1px dashed var(--panel-border);
+  border-radius: 12px; text-align: center;
+  background:
+    radial-gradient(500px 180px at 50% 120%, rgba(57,227,255,0.06), transparent 60%),
+    rgba(10,15,26,0.35);
+}
+.empty-state .glyph {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: grid; place-items: center; font-size: 22px;
+  background: linear-gradient(135deg, rgba(57,227,255,0.15), rgba(160,107,255,0.10));
+  border: 1px solid var(--panel-border-strong);
+  box-shadow: var(--glow-soft);
+}
+.empty-state .title { color: var(--text); font-size: 14px; letter-spacing: 0.08em; }
+.empty-state .hint  { color: var(--muted); font-size: 12px; max-width: 420px; }
+
+/* Confidence / utilisation horizontal bar. */
+.hbar {
+  height: 8px; border-radius: 999px; overflow: hidden;
+  border: var(--hairline); background: rgba(0,0,0,0.35);
+}
+.hbar > span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+  box-shadow: 0 0 10px rgba(57,227,255,0.35);
+}
+.hbar.warn > span  { background: linear-gradient(90deg, var(--neon-green), var(--neon-amber), var(--neon-red)); }
+
+/* Heatmap cell (OptionChain OI intensity). */
+.heat {
+  position: relative;
+  padding: 6px 8px; border-radius: 6px;
+  font-family: "JetBrains Mono", monospace; font-size: 12px;
+  text-align: right;
+}
+.heat.ce { color: var(--neon-green); }
+.heat.pe { color: var(--neon-red); }
+
+/* Compact KPI row (alternative to .card.kpi when you want denser layout). */
+.kpi-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+.kpi-row .stat {
+  padding: 12px 14px; border-radius: 12px;
+  border: var(--hairline); background: var(--panel-2);
+}
+.kpi-row .stat .label {
+  color: var(--muted-2); font-size: 10px; letter-spacing: 0.24em;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.kpi-row .stat .big {
+  font-family: "Orbitron", sans-serif; font-size: 22px; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.kpi-row .stat.pos .big { color: var(--neon-green); text-shadow: 0 0 10px rgba(107,255,158,0.30); }
+.kpi-row .stat.neg .big { color: var(--neon-red);   text-shadow: 0 0 10px rgba(255,84,116,0.30); }
+@media (max-width: 1200px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Footer disclaimer strip. */
+.disclaimer {
+  grid-column: span 12;
+  text-align: center; padding: 10px 16px; border-radius: 10px;
+  border: var(--hairline); background: rgba(10,15,26,0.35);
+  color: var(--muted); font-size: 11px; letter-spacing: 0.14em;
+}
+.disclaimer strong { color: var(--neon-amber); }
