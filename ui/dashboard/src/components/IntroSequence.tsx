@@ -1,20 +1,18 @@
 /**
- * Cinematic homepage intro — black curtain → gilded door opens → welcome
- * text → fade to app. Pure SVG + framer-motion, no photo assets, no
- * Three.js (keeps the bundle lean and avoids Rolls-Royce / real-estate
- * licensing pitfalls for user-provided luxury imagery).
+ * Cinematic homepage intro — layered video backdrop (mansion aerial +
+ * skyline + gold-dust) with photographic vignettes (Rolls-Royce, private
+ * jet, chandelier, grand mansion) circling a gilded door that opens into
+ * the app. Assets are royalty-free Pexels / Unsplash, compressed into
+ * /public/intro and bundled with the site.
  *
  * Trigger rules:
  *   - Shown once per browser session by default (sessionStorage flag).
  *   - URL `?intro=1` forces a replay (handy for demos).
  *   - Respects `prefers-reduced-motion` → collapses to a 400 ms gilt fade.
  *   - Skip button (top-right) always dismisses immediately.
- *
- * The intro mounts above everything else (z-index 100, fixed). When the
- * sequence completes (or the user clicks Skip) it unmounts via onDone.
  */
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const STORAGE_KEY = "billionaire:intro-seen";
 
@@ -342,6 +340,154 @@ function GoldenDoor({ opening }: { opening: boolean }) {
 }
 
 /* --------------------------------------------------------------------- */
+/* Cinema backdrop — layered video loops (mansion aerial + skyline +     */
+/* gold-dust overlay) with tint + darkening vignette.                    */
+/* --------------------------------------------------------------------- */
+function CinemaBackdrop({ phase }: { phase: "curtain" | "open" | "exit" }) {
+  const mansionRef = useRef<HTMLVideoElement>(null);
+  const skylineRef = useRef<HTMLVideoElement>(null);
+  const dustRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    // Kick off playback as soon as mounted — mobile autoplay requires muted.
+    [mansionRef, skylineRef, dustRef].forEach((r) => {
+      const v = r.current;
+      if (v) {
+        v.muted = true;
+        const play = v.play();
+        if (play && typeof play.catch === "function") play.catch(() => {});
+      }
+    });
+  }, []);
+
+  return (
+    <div className="cinema" aria-hidden>
+      <motion.video
+        ref={mansionRef}
+        className="cinema-layer layer-mansion"
+        initial={{ opacity: 0, scale: 1.08 }}
+        animate={{
+          opacity: phase === "curtain" ? 0.62 : phase === "open" ? 0.3 : 0,
+          scale: phase === "curtain" ? 1.0 : 1.14,
+        }}
+        transition={{ duration: 3.6, ease: [0.22, 0.8, 0.2, 1] }}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        poster="/intro/mansion.jpg"
+        src="/intro/mansion_bg.mp4"
+      />
+      <motion.video
+        ref={skylineRef}
+        className="cinema-layer layer-skyline"
+        initial={{ opacity: 0, scale: 1.02 }}
+        animate={{
+          opacity: phase === "curtain" ? 0.0 : phase === "open" ? 0.45 : 0,
+          scale: phase === "open" ? 1.12 : 1.02,
+        }}
+        transition={{ duration: 4.2, ease: [0.22, 0.8, 0.2, 1] }}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        src="/intro/skyline.mp4"
+      />
+      <motion.video
+        ref={dustRef}
+        className="cinema-layer layer-dust"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: phase === "exit" ? 0 : 0.7 }}
+        transition={{ duration: 1.6 }}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        src="/intro/golddust.mp4"
+      />
+      <div className="cinema-tint" />
+      <div className="cinema-vignette" />
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------- */
+/* Vignettes — photo inserts that appear as framed gilt portraits around  */
+/* the door, fading and slowly Ken-Burns-panning during the sequence.     */
+/* --------------------------------------------------------------------- */
+type Vignette = {
+  src: string;
+  alt: string;
+  style: React.CSSProperties;
+  delay: number;
+};
+
+const VIGNETTES: Vignette[] = [
+  {
+    src: "/intro/chandelier.jpg",
+    alt: "Crystal chandelier",
+    style: { top: "4%", left: "50%", width: "22vmin", height: "14vmin", transform: "translateX(-50%)" },
+    delay: 0.2,
+  },
+  {
+    src: "/intro/car.jpg",
+    alt: "Luxury car",
+    style: { bottom: "12%", left: "4%", width: "26vmin", height: "15vmin" },
+    delay: 0.5,
+  },
+  {
+    src: "/intro/jet.jpg",
+    alt: "Private jet",
+    style: { bottom: "12%", right: "4%", width: "26vmin", height: "15vmin" },
+    delay: 0.7,
+  },
+  {
+    src: "/intro/mansion.jpg",
+    alt: "Grand estate",
+    style: { top: "22%", left: "3%", width: "20vmin", height: "13vmin" },
+    delay: 0.35,
+  },
+  {
+    src: "/intro/goldbg.jpg",
+    alt: "Gilded texture",
+    style: { top: "22%", right: "3%", width: "20vmin", height: "13vmin" },
+    delay: 0.55,
+  },
+];
+
+function Vignettes({ phase }: { phase: "curtain" | "open" | "exit" }) {
+  return (
+    <div className="vignettes" aria-hidden>
+      {VIGNETTES.map((v, i) => (
+        <motion.div
+          key={i}
+          className="vignette"
+          style={v.style}
+          initial={{ opacity: 0, y: 18, scale: 0.92 }}
+          animate={{
+            opacity:
+              phase === "exit" ? 0 : phase === "open" ? 0.78 : 0.38,
+            y: 0,
+            scale: phase === "open" ? 1.03 : 1.0,
+          }}
+          transition={{
+            duration: 2.4,
+            delay: v.delay,
+            ease: [0.22, 0.8, 0.2, 1],
+          }}
+        >
+          <img src={v.src} alt={v.alt} loading="eager" decoding="async" />
+          <div className="vignette-frame" />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------- */
 /* Main orchestrator.                                                     */
 /* --------------------------------------------------------------------- */
 export default function IntroSequence({ onDone }: { onDone: () => void }) {
@@ -366,8 +512,11 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
       return () => window.clearTimeout(t);
     }
     // Choreographed timeline — slower, more dramatic. Every beat breathes.
-    const t1 = window.setTimeout(() => setPhase("open"), 2200); // start door opening
-    const t2 = window.setTimeout(finish, 8800); // extended cinematic window
+    // 0-3.2s: curtain (cinema backdrop + vignettes fade in)
+    // 3.2-10.5s: doors open, light spills, welcome text
+    // 10.5s: exit
+    const t1 = window.setTimeout(() => setPhase("open"), 3200);
+    const t2 = window.setTimeout(finish, 10500);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
@@ -385,6 +534,12 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
         transition={{ duration: phase === "exit" ? 0.9 : 0, ease: "easeInOut" }}
         aria-label="Welcome sequence"
       >
+        {/* Cinematic video backdrop — mansion aerial + skyline + gold dust. */}
+        <CinemaBackdrop phase={phase} />
+
+        {/* Framed photographic vignettes — Rolls-Royce, jet, chandelier, estate. */}
+        <Vignettes phase={phase} />
+
         {/* Ambient layers — marble floor, warm halo, fan of rays. */}
         <div className="backdrop" />
         <div className="halo" />
