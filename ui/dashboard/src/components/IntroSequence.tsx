@@ -41,18 +41,19 @@ function markIntroSeen() {
 /* --------------------------------------------------------------------- */
 /* Particles — deterministic random-ish dust with variable drift vectors. */
 /* --------------------------------------------------------------------- */
-function useDustParticles(count = 42) {
+function useDustParticles(count = 88) {
   return useMemo(() => {
     const rng = mulberry32(0xb4d7);
     return Array.from({ length: count }, () => {
       const left = rng() * 100;
-      const top = 60 + rng() * 40; // start lower half
-      const dx = (rng() - 0.5) * 120;
-      const dy = -120 - rng() * 320; // float upward
-      const delay = rng() * 14;
-      const duration = 10 + rng() * 8;
-      const size = 2 + rng() * 3;
-      return { left, top, dx, dy, delay, duration, size };
+      const top = 40 + rng() * 60; // start mid-lower area
+      const dx = (rng() - 0.5) * 180;
+      const dy = -160 - rng() * 480; // float upward, varied height
+      const delay = rng() * 18;
+      const duration = 8 + rng() * 14;
+      const size = 1.2 + rng() * 4;
+      const bright = rng() > 0.75; // 25% are brighter particles
+      return { left, top, dx, dy, delay, duration, size, bright };
     });
   }, [count]);
 }
@@ -140,8 +141,8 @@ function GoldenDoor({ opening }: { opening: boolean }) {
   const doorVariants = (side: "left" | "right") => ({
     closed: { rotateY: 0 },
     open: {
-      rotateY: side === "left" ? -78 : 78,
-      transition: { duration: 2.6, ease: [0.45, 0.05, 0.2, 1] as const },
+      rotateY: side === "left" ? -82 : 82,
+      transition: { duration: 4.2, ease: [0.42, 0.04, 0.2, 1] as const },
     },
   });
 
@@ -159,16 +160,38 @@ function GoldenDoor({ opening }: { opening: boolean }) {
       {/* Warm light spill from inside the frame — becomes visible as the
           doors swing outward. Layered beneath the doors, above the stage. */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.4 }}
-        animate={{ opacity: opening ? 1 : 0, scale: opening ? 1.6 : 0.6 }}
-        transition={{ duration: 2.8, ease: "easeOut", delay: opening ? 0.8 : 0 }}
+        initial={{ opacity: 0, scale: 0.3 }}
+        animate={{
+          opacity: opening ? 1 : 0,
+          scale: opening ? 2.0 : 0.4,
+        }}
+        transition={{ duration: 4.2, ease: "easeOut", delay: opening ? 1.1 : 0 }}
         style={{
           position: "absolute",
-          width: "86%",
-          height: "92%",
+          width: "96%",
+          height: "96%",
           background:
-            "radial-gradient(ellipse at center, rgba(255,240,200,0.9) 0%, rgba(244,210,122,0.55) 20%, rgba(212,175,55,0.25) 45%, transparent 72%)",
-          filter: "blur(6px)",
+            "radial-gradient(ellipse at center, rgba(255,246,221,1) 0%, rgba(255,240,200,0.85) 12%, rgba(244,210,122,0.65) 28%, rgba(212,175,55,0.35) 52%, transparent 78%)",
+          filter: "blur(8px)",
+          mixBlendMode: "screen",
+          pointerEvents: "none",
+        }}
+      />
+      {/* Secondary outer light burst — extends the glow beyond the door frame. */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.5 }}
+        animate={{
+          opacity: opening ? 0.8 : 0,
+          scale: opening ? 3 : 0.5,
+        }}
+        transition={{ duration: 5, ease: "easeOut", delay: opening ? 1.6 : 0 }}
+        style={{
+          position: "absolute",
+          width: "120%",
+          height: "130%",
+          background:
+            "radial-gradient(ellipse at center, rgba(244,210,122,0.25) 0%, rgba(212,175,55,0.08) 40%, transparent 70%)",
+          filter: "blur(24px)",
           mixBlendMode: "screen",
           pointerEvents: "none",
         }}
@@ -294,12 +317,22 @@ function GoldenDoor({ opening }: { opening: boolean }) {
               <path d="M-10 0 L 0 -8 L 10 0 L 0 8 Z" fill="none" stroke={`url(#panel-g-${side})`} strokeWidth="0.5" />
             </g>
 
-            {/* Handle — jewelled medallion on the centre edge. */}
+            {/* Handle — jewelled medallion on the centre edge with shimmer. */}
             <g
               transform={side === "left" ? "translate(186 240)" : "translate(14 240)"}
             >
-              <circle r="7" fill={`url(#medallion-${side})`} />
-              <rect x="-2" y="6" width="4" height="30" fill={`url(#panel-g-${side})`} opacity="0.85" />
+              <circle r="9" fill={`url(#medallion-${side})`} />
+              <circle r="4" fill="#fff6dd" opacity="0.85">
+                <animate attributeName="opacity" values="0.4;1;0.4" dur="3.2s" repeatCount="indefinite" />
+                <animate attributeName="r" values="3;4.5;3" dur="3.2s" repeatCount="indefinite" />
+              </circle>
+              <rect x="-2" y="8" width="4" height="34" fill={`url(#panel-g-${side})`} opacity="0.9" />
+            </g>
+
+            {/* Additional embossed quatrefoil detail — mid panel. */}
+            <g transform="translate(100 250)" opacity="0.4">
+              <path d="M0 -12 C 6 -12, 12 -6, 12 0 C 12 6, 6 12, 0 12 C -6 12, -12 6, -12 0 C -12 -6, -6 -12, 0 -12 Z" fill="none" stroke={`url(#panel-g-${side})`} strokeWidth="0.5" />
+              <path d="M0 0 L 8 -8 M 0 0 L -8 -8 M 0 0 L 8 8 M 0 0 L -8 8" stroke={`url(#panel-g-${side})`} strokeWidth="0.4" />
             </g>
           </svg>
         </motion.div>
@@ -315,7 +348,7 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<"curtain" | "open" | "exit">("curtain");
   const doneRef = useRef(false);
-  const particles = useDustParticles(48);
+  const particles = useDustParticles(92);
 
   const finish = () => {
     if (doneRef.current) return;
@@ -323,7 +356,7 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
     markIntroSeen();
     setPhase("exit");
     // Let the exit fade play before unmounting.
-    window.setTimeout(onDone, reduced ? 150 : 900);
+    window.setTimeout(onDone, reduced ? 150 : 1200);
   };
 
   useEffect(() => {
@@ -332,9 +365,9 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
       const t = window.setTimeout(finish, 400);
       return () => window.clearTimeout(t);
     }
-    // Choreographed timeline. Timings chosen to feel unhurried but not sleepy.
-    const t1 = window.setTimeout(() => setPhase("open"), 1600); // start door opening
-    const t2 = window.setTimeout(finish, 6200); // fade out + hand off to app
+    // Choreographed timeline — slower, more dramatic. Every beat breathes.
+    const t1 = window.setTimeout(() => setPhase("open"), 2200); // start door opening
+    const t2 = window.setTimeout(finish, 8800); // extended cinematic window
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
@@ -359,12 +392,12 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
         <SkylineSilhouettes />
         <div className="floor" />
 
-        {/* Particles layer — golden dust drifting upward. */}
+        {/* Particles layer — golden dust drifting upward, with bright sparks. */}
         <div className="particles" aria-hidden>
           {particles.map((p, i) => (
             <span
               key={i}
-              className="p"
+              className={`p ${p.bright ? "bright" : ""}`}
               style={{
                 left: `${p.left}%`,
                 top: `${p.top}%`,
@@ -383,12 +416,12 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
         {/* Camera push — the whole door stage slightly approaches as it opens. */}
         <motion.div
           className="door-stage"
-          initial={{ scale: 0.92, opacity: 0 }}
+          initial={{ scale: 0.86, opacity: 0 }}
           animate={{
-            scale: phase === "open" ? 1.06 : 1,
+            scale: phase === "open" ? 1.18 : 0.96,
             opacity: 1,
           }}
-          transition={{ duration: 2.8, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 4.4, ease: [0.2, 0.8, 0.2, 1] }}
         >
           <GoldenDoor opening={phase === "open"} />
         </motion.div>
@@ -396,12 +429,13 @@ export default function IntroSequence({ onDone }: { onDone: () => void }) {
         {/* Welcome copy — eases in once the doors start parting. */}
         <motion.div
           className="welcome"
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 24, scale: 0.96 }}
           animate={{
             opacity: phase === "open" ? 1 : 0,
-            y: phase === "open" ? 0 : 16,
+            y: phase === "open" ? 0 : 24,
+            scale: phase === "open" ? 1 : 0.96,
           }}
-          transition={{ duration: 1.6, delay: phase === "open" ? 1.2 : 0, ease: "easeOut" }}
+          transition={{ duration: 2.2, delay: phase === "open" ? 2.0 : 0, ease: [0.22, 0.8, 0.2, 1] }}
         >
           <div className="eyebrow">Private · Decision Support</div>
           <h1>Welcome, Billionaire Vishal</h1>
