@@ -69,14 +69,14 @@ export default function Overview({
               className="col"
               style={{
                 flex: "0 0 200px", marginLeft: 18, paddingLeft: 18,
-                borderLeft: "1px dashed rgba(130,200,255,0.15)",
+                borderLeft: "1px dashed rgba(212,175,55,0.18)",
               }}
             >
               <div className="muted tiny">BIAS</div>
               <div className="row" style={{ gap: 10 }}>
                 <div className={`bias-arrow ${biasClass}`}>{biasArrow}</div>
                 <div>
-                  <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: 16 }}>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 18 }}>
                     {forecast?.bias ?? "—"}
                   </div>
                   <div className="muted tiny">

@@ -100,8 +100,8 @@ export default function Positions({ portfolio }: { portfolio: PortfolioResp | nu
                         textAlign: "right",
                         color: positive ? "var(--neon-green)" : "var(--neon-red)",
                         textShadow: positive
-                          ? "0 0 10px rgba(107,255,158,0.25)"
-                          : "0 0 10px rgba(255,84,116,0.25)",
+                          ? "0 0 10px rgba(159,207,138,0.28)"
+                          : "0 0 10px rgba(200,90,90,0.28)",
                       }}
                     >
                       ₹ {fmt(pnl)}
