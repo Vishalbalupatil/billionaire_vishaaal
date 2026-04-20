@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type HealthResp, type PortfolioResp, type RiskStatus } from "./api";
 import AskAI from "./components/AskAI";
+import IntroSequence, { shouldShowIntro } from "./components/IntroSequence";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Alerts from "./views/Alerts";
@@ -32,6 +33,7 @@ export default function App() {
   const [risk, setRisk] = useState<RiskStatus | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioResp | null>(null);
   const [askOpen, setAskOpen] = useState(false);
+  const [introVisible, setIntroVisible] = useState(() => shouldShowIntro());
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
@@ -55,7 +57,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="logo">B</div>
-          <div className="name">NIFTY · AI</div>
+          <div className="name">Vishaaal</div>
         </div>
         <Sidebar view={view} onChange={setView} />
       </aside>
@@ -81,6 +83,7 @@ export default function App() {
         risk={risk}
         portfolio={portfolio}
       />
+      {introVisible && <IntroSequence onDone={() => setIntroVisible(false)} />}
     </div>
   );
 }
