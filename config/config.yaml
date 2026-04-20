@@ -1,6 +1,11 @@
 # Sample runtime configuration. Values here are informational — the source of
 # truth for the running app is .env (see .env.example). This file documents
 # expected structure for operators.
+#
+# Scope: Nifty 50 only. We cover the Nifty 50 index, Nifty index futures,
+# Nifty index options, and the 50 Nifty constituent equities. Bank Nifty,
+# MCX commodities, BSE-only names and anything outside Nifty 50 are
+# intentionally out of scope.
 
 app:
   mode: analysis         # analysis | paper | live
@@ -18,23 +23,71 @@ market:
   square_off: "15:20"
 
 watchlist:
+  # Kept narrow on purpose: Nifty index + all 50 constituents. Derivatives
+  # (Nifty futures + Nifty options) are resolved at runtime from the
+  # Zerodha instrument master (see `derivatives.auto_load_current_expiry`).
   indices:
     - NSE:NIFTY 50
-    - NSE:NIFTY BANK
   equity:
     - NSE:RELIANCE
     - NSE:HDFCBANK
+    - NSE:ICICIBANK
     - NSE:INFY
     - NSE:TCS
+    - NSE:BHARTIARTL
+    - NSE:ITC
+    - NSE:LT
+    - NSE:AXISBANK
+    - NSE:KOTAKBANK
+    - NSE:SBIN
+    - NSE:HINDUNILVR
+    - NSE:BAJFINANCE
+    - NSE:MARUTI
+    - NSE:ASIANPAINT
+    - NSE:HCLTECH
+    - NSE:M&M
+    - NSE:SUNPHARMA
+    - NSE:TITAN
+    - NSE:ULTRACEMCO
+    - NSE:NTPC
+    - NSE:POWERGRID
+    - NSE:NESTLEIND
+    - NSE:WIPRO
+    - NSE:ADANIENT
+    - NSE:ADANIPORTS
+    - NSE:TATAMOTORS
+    - NSE:ONGC
+    - NSE:JSWSTEEL
+    - NSE:BAJAJFINSV
+    - NSE:COALINDIA
+    - NSE:GRASIM
     - NSE:TATASTEEL
+    - NSE:HINDALCO
+    - NSE:INDUSINDBK
+    - NSE:TECHM
+    - NSE:CIPLA
+    - NSE:DRREDDY
+    - NSE:APOLLOHOSP
+    - NSE:BRITANNIA
+    - NSE:DIVISLAB
+    - NSE:EICHERMOT
+    - NSE:HEROMOTOCO
+    - NSE:BAJAJ-AUTO
+    - NSE:BPCL
+    - NSE:SHRIRAMFIN
+    - NSE:TATACONSUM
+    - NSE:SBILIFE
+    - NSE:HDFCLIFE
+    - NSE:LTIM
   derivatives:
-    # Populated at runtime from instrument master (current weekly expiry).
+    # Populated at runtime from instrument master. We only load the current
+    # weekly NIFTY index expiry (futures + ATM-centred options strikes).
     auto_load_current_expiry: true
+    underlying: "NIFTY"
 
 timeframes: ["1m", "3m", "5m", "15m", "1h"]
 
 exposure_caps:
   options_buying_max_capital_pct: 15
-  options_selling_max_capital_pct: 35
   futures_max_capital_pct: 50
   equity_intraday_max_capital_pct: 60
