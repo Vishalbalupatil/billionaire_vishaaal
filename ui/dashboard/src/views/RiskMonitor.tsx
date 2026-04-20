@@ -218,7 +218,7 @@ function RingGauge({ pct }: { pct: number }) {
           stroke={color}
           strokeWidth="10"
           strokeDasharray={`${dash} ${c - dash}`}
-          strokeDashoffset={c / 4}
+          strokeDashoffset={0}
           strokeLinecap="round"
           transform="rotate(-90 80 80)"
           style={{ filter: `drop-shadow(0 0 6px ${color})` }}
