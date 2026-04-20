@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from billionaire import __version__
 from billionaire.api.routes import build_router
 from billionaire.config import get_settings
 from billionaire.logging_setup import setup_logging
+from billionaire.marketdata.watchlist import load_watchlist_symbols, resolve_tokens
 from billionaire.runtime import get_runtime
 
 setup_logging()
@@ -59,6 +61,33 @@ async def _startup() -> None:
     if r.ws:
         started = r.ws.connect()
         log.info("WebSocket start: %s", started)
+
+    # Without this, KiteTicker connects but never receives ticks because no
+    # instrument tokens have been subscribed.
+    if r.instruments and r.ws:
+        await asyncio.to_thread(_load_and_subscribe_watchlist, r)
+
+
+def _load_and_subscribe_watchlist(r) -> None:  # type: ignore[no-untyped-def]
+    try:
+        r.instruments.load()
+    except Exception as e:  # pragma: no cover — network-dependent
+        log.warning("Instrument master load failed: %s", e)
+        return
+    log.info("Instrument master: %d instruments cached", len(r.instruments))
+
+    cfg_path = Path("config/config.yaml")
+    symbols = load_watchlist_symbols(cfg_path)
+    tokens, missing = resolve_tokens(symbols, r.instruments)
+    log.info(
+        "Watchlist: %d symbols configured -> %d tokens resolved (%d missing)",
+        len(symbols), len(tokens), len(missing),
+    )
+    if missing:
+        log.info("Unresolved watchlist symbols: %s", missing)
+    if tokens:
+        r.ws.set_tokens(tokens)
+        log.info("Subscribed KiteTicker to %d tokens", len(tokens))
 
 
 @app.websocket("/ws")
