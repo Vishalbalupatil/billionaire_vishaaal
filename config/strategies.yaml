@@ -1,5 +1,5 @@
 # Strategy parameter overrides. Each entry maps a strategy `name` to params
-# that override defaults at registration time.
+# that override defaults at registration time. Scope: Nifty 50 only.
 
 strategies:
   nifty_momentum_breakout:
@@ -7,11 +7,6 @@ strategies:
     timeframes: ["5m", "15m"]
     params:
       lookback: 20
-
-  banknifty_reversal_scalp:
-    enabled: true
-    timeframes: ["1m", "3m"]
-    params: {}
 
   equity_intraday_breakout:
     enabled: true
@@ -22,9 +17,4 @@ strategies:
   options_premium_momentum:
     enabled: true
     timeframes: ["3m", "5m"]
-    params: {}
-
-  futures_trend_follow:
-    enabled: true
-    timeframes: ["15m", "1h"]
     params: {}

@@ -1,44 +1,60 @@
+"""Tests for CandleBuilder history buffer (used by the forecast endpoint)."""
+
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 from billionaire.marketdata.candle_builder import CandleBuilder
-from billionaire.models import Tick
+from billionaire.models import Candle, Tick
 
 
-def _tick(price: float, ts: datetime, token: int = 1, volume: int = 10) -> Tick:
-    return Tick(instrument_token=token, ltp=price, volume=volume, ts=ts)
+def _tick(token: int, price: float, ts: datetime) -> Tick:
+    return Tick(instrument_token=token, ltp=price, ts=ts, volume=10, oi=0)
 
 
-def test_candle_rollover_emits_completed_bar():
+def test_recent_candles_empty_by_default() -> None:
     cb = CandleBuilder(timeframes=["1m"])
-    start = datetime(2025, 1, 1, 9, 15, 0)
-    # ticks within first minute
-    cb.on_tick(_tick(100, start))
-    cb.on_tick(_tick(101, start + timedelta(seconds=30)))
-    # tick in next minute -> rollover
-    completed = cb.on_tick(_tick(102, start + timedelta(seconds=61)))
-    assert len(completed) == 1
-    c = completed[0]
-    assert c.open == 100 and c.close == 101 and c.high == 101 and c.low == 100
-    assert c.timeframe == "1m"
+    assert cb.recent_candles(123, "1m") == []
 
 
-def test_current_candle_live_view():
+def test_rollover_populates_history_ring() -> None:
     cb = CandleBuilder(timeframes=["1m"])
-    start = datetime(2025, 1, 1, 9, 15, 0)
-    cb.on_tick(_tick(100, start))
-    cb.on_tick(_tick(99, start + timedelta(seconds=15)))
-    cur = cb.current_candle(1, "1m")
-    assert cur is not None
-    assert cur.low == 99 and cur.high == 100
+    base = datetime(2024, 1, 2, 3, 30, 0)
+    # 25 consecutive one-minute ticks; each new-minute tick rolls over the
+    # prior bucket, producing 24 completed candles.
+    for i in range(25):
+        cb.on_tick(_tick(42, 100.0 + i, base + timedelta(minutes=i)))
+    recent = cb.recent_candles(42, "1m")
+    assert len(recent) == 24
+    assert recent[0].close == 100.0
+    assert recent[-1].close == 123.0
+    # Current (in-progress) bucket is separate from history.
+    cur = cb.current_candle(42, "1m")
+    assert cur is not None and cur.close == 124.0
 
 
-def test_multiple_timeframes():
-    cb = CandleBuilder(timeframes=["1m", "5m"])
-    start = datetime(2025, 1, 1, 9, 15, 0)
+def test_history_respects_max_size() -> None:
+    cb = CandleBuilder(timeframes=["1m"], history_size=5)
+    base = datetime(2024, 1, 2, 3, 30, 0)
     for i in range(10):
-        cb.on_tick(_tick(100 + i, start + timedelta(seconds=i * 30)))
-    # After 5 minutes, the 5m candle should still be forming or just closed once
-    cur5 = cb.current_candle(1, "5m")
-    cur1 = cb.current_candle(1, "1m")
-    assert cur5 is not None
-    assert cur1 is not None
+        cb.on_tick(_tick(7, 50.0 + i, base + timedelta(minutes=i)))
+    recent = cb.recent_candles(7, "1m")
+    assert len(recent) == 5  # oldest dropped by the deque
+
+
+def test_seed_history_preloads_buffer() -> None:
+    cb = CandleBuilder(timeframes=["1m"])
+    base = datetime(2024, 1, 2, 9, 15, 0)
+    preload = [
+        Candle(
+            instrument_token=1, timeframe="1m",
+            open=100.0 + i, high=100.5 + i, low=99.5 + i, close=100.2 + i,
+            volume=1_000, oi=0, ts=base + timedelta(minutes=i),
+        )
+        for i in range(30)
+    ]
+    cb.seed_history(1, "1m", preload)
+    closes = [c.close for c in cb.recent_candles(1, "1m")]
+    assert len(closes) == 30
+    assert closes[0] == 100.2
+    assert closes[-1] == 129.2

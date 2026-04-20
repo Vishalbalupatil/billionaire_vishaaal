@@ -22,6 +22,23 @@ from billionaire.models import (
     SignalDirection,
 )
 from billionaire.runtime import get_runtime
+from billionaire.strategy.forecaster import forecast as _forecast
+from billionaire.strategy.forecaster import synthetic_closes
+
+# Nifty 50 universe, surfaced by /api/universe so the UI can render the
+# watchlist without hard-coding it on the frontend.
+NIFTY50_EQUITIES: list[str] = [
+    "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS",
+    "BHARTIARTL", "ITC", "LT", "AXISBANK", "KOTAKBANK",
+    "SBIN", "HINDUNILVR", "BAJFINANCE", "MARUTI", "ASIANPAINT",
+    "HCLTECH", "M&M", "SUNPHARMA", "TITAN", "ULTRACEMCO",
+    "NTPC", "POWERGRID", "NESTLEIND", "WIPRO", "ADANIENT",
+    "ADANIPORTS", "TATAMOTORS", "ONGC", "JSWSTEEL", "BAJAJFINSV",
+    "COALINDIA", "GRASIM", "TATASTEEL", "HINDALCO", "INDUSINDBK",
+    "TECHM", "CIPLA", "DRREDDY", "APOLLOHOSP", "BRITANNIA",
+    "DIVISLAB", "EICHERMOT", "HEROMOTOCO", "BAJAJ-AUTO", "BPCL",
+    "SHRIRAMFIN", "TATACONSUM", "SBILIFE", "HDFCLIFE", "LTIM",
+]
 
 
 class TickIn(BaseModel):
@@ -156,7 +173,7 @@ def build_router() -> APIRouter:
             instrument_token=s.instrument_token,
             tradingsymbol=s.symbol,
             exchange=Exchange(s.exchange),
-            segment=Segment.INDEX if s.symbol.upper() in {"NIFTY", "BANKNIFTY"} else Segment.EQUITY,
+            segment=Segment.INDEX if s.symbol.upper() == "NIFTY" else Segment.EQUITY,
         )
         sig = Signal(
             instrument=inst,
@@ -178,6 +195,84 @@ def build_router() -> APIRouter:
             # demo MARKET orders fill deterministically without a separate tick.
             r.paper_broker.on_ltp(s.instrument_token, s.entry)
         return r.orders.handle_signal(sig)
+
+    @router.get("/universe")
+    def universe() -> dict[str, Any]:
+        """Return the locked Nifty 50 universe so the UI never drifts from it."""
+        return {
+            "index": "NIFTY 50",
+            "futures_underlying": "NIFTY",
+            "options_underlying": "NIFTY",
+            "equities": NIFTY50_EQUITIES,
+        }
+
+    @router.get("/forecast")
+    def forecast_api(
+        symbol: str = "NIFTY",
+        horizon: str = "intraday",
+        steps: int = 30,
+    ) -> dict[str, Any]:
+        """Produce a heuristic forecast for ``symbol``.
+
+        If no live candle history has accumulated yet (or we're outside
+        market hours), falls back to deterministic synthetic closes so the UI
+        always has something to render. The response carries a ``source``
+        field so the UI can label it "synthetic" vs "live".
+        """
+        horizon = horizon.lower()
+        if horizon not in {"intraday", "daily", "bias"}:
+            raise HTTPException(400, f"unknown horizon: {horizon!r}")
+        steps = max(1, min(steps, 120))
+
+        r = get_runtime()
+        closes: list[float] = []
+        source = "synthetic"
+        inst_token = 0
+        if r.instruments is not None:
+            inst = r.instruments.by_symbol(f"NSE:{symbol}") or r.instruments.by_symbol(symbol)
+            if inst is not None:
+                inst_token = inst.instrument_token
+        # Pull recent completed 1m candles from the builder's ring buffer.
+        if inst_token:
+            recent = r.candle_builder.recent_candles(inst_token, "1m", n=120)
+            closes = [c.close for c in recent]
+            # Include the currently-forming bar as the freshest close when
+            # available — this matters for slow symbols where the last
+            # completed bar is already a minute old.
+            cur = r.candle_builder.current_candle(inst_token, "1m")
+            if cur is not None and (not recent or cur.ts > recent[-1].ts):
+                closes.append(cur.close)
+        if len(closes) < 20:
+            closes = synthetic_closes(n=120)
+            source = "synthetic"
+        else:
+            source = "live"
+
+        try:
+            result = _forecast(
+                closes, horizon=horizon, steps=steps, symbol=symbol,
+                step_seconds=60 if horizon == "intraday" else None,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+
+        return {
+            "symbol": result.symbol,
+            "horizon": result.horizon,
+            "source": source,
+            "last_price": result.last_price,
+            "drift_per_step": result.drift_per_step,
+            "vol_per_step": result.vol_per_step,
+            "bias": result.bias,
+            "confidence": result.confidence,
+            "notes": result.notes,
+            "disclaimer": result.disclaimer,
+            "points": [
+                {"step": p.step, "ts": p.ts_iso, "price": p.price,
+                 "lower": p.lower, "upper": p.upper}
+                for p in result.points
+            ],
+        }
 
     @router.post("/orders/manual")
     def manual_order(o: ManualOrderIn) -> dict[str, Any]:
