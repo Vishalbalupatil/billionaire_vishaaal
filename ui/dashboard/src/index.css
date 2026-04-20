@@ -922,6 +922,101 @@ table.glow-rows tbody tr:hover {
 }
 .intro.exit { pointer-events: none; }
 
+/* Cinema backdrop — stacked videos (mansion aerial + skyline + gold dust)
+   beneath the stage. Slightly desaturated, strongly vignetted so the
+   door silhouette still dominates the composition. */
+.intro .cinema {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none; overflow: hidden;
+}
+.intro .cinema-layer {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+.intro .cinema-layer.layer-mansion {
+  filter: contrast(1.08) brightness(0.68) saturate(1.08) sepia(0.15)
+    hue-rotate(-4deg);
+}
+.intro .cinema-layer.layer-skyline {
+  filter: contrast(1.1) brightness(0.62) saturate(1.25) sepia(0.1);
+  mix-blend-mode: screen;
+}
+.intro .cinema-layer.layer-dust {
+  mix-blend-mode: screen;
+  filter: brightness(1.15) saturate(1.3);
+}
+/* Warm gold wash over the top. */
+.intro .cinema-tint {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 50%,
+      rgba(244, 210, 122, 0.14) 0%,
+      rgba(212, 175, 55, 0.08) 35%,
+      transparent 70%),
+    linear-gradient(180deg,
+      rgba(10, 6, 2, 0.55) 0%,
+      rgba(5, 4, 10, 0.15) 40%,
+      rgba(5, 4, 10, 0.25) 70%,
+      rgba(5, 4, 10, 0.85) 100%);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+/* Radial darkening vignette so the edges recede and the door pops. */
+.intro .cinema-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 58%,
+    transparent 0%,
+    rgba(5, 4, 10, 0.2) 30%,
+    rgba(5, 4, 10, 0.65) 65%,
+    rgba(5, 4, 10, 0.95) 100%
+  );
+  pointer-events: none;
+}
+
+/* Photographic vignettes — framed portraits around the door stage. */
+.intro .vignettes {
+  position: absolute; inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.intro .vignette {
+  position: absolute;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.55),
+    0 0 0 3px rgba(10, 6, 2, 0.8),
+    0 0 0 4px rgba(212, 175, 55, 0.25),
+    0 20px 60px rgba(0, 0, 0, 0.7),
+    0 0 36px rgba(212, 175, 55, 0.18),
+    inset 0 0 80px rgba(0, 0, 0, 0.45);
+  background: #05040a;
+}
+.intro .vignette img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: sepia(0.2) saturate(1.2) contrast(1.08) brightness(0.78);
+  animation: ken-burns 20s ease-in-out infinite alternate;
+}
+.intro .vignette-frame {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 60%, rgba(5, 4, 10, 0.55) 100%),
+    radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(5, 4, 10, 0.55) 100%);
+  box-shadow: inset 0 0 0 1px rgba(244, 210, 122, 0.35);
+  border-radius: 10px;
+}
+@keyframes ken-burns {
+  0%   { transform: scale(1.02) translate(0, 0); }
+  100% { transform: scale(1.18) translate(-2.5%, -3.5%); }
+}
+
 .intro .backdrop {
   position: absolute; inset: 0; z-index: 0;
   background:
