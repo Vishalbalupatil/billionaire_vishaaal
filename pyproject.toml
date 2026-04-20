@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "billionaire-vishaaal"
+version = "0.1.0"
+description = "AI-assisted trading platform for Indian markets (Zerodha Kite Connect). Decision-support tool - not financial advice."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Vishal Balupatil" }]
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+    "httpx>=0.27",
+    "websockets>=12.0",
+    "sqlalchemy>=2.0",
+    "aiosqlite>=0.19",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pyyaml>=6.0",
+    "rich>=13.7",
+    "python-dateutil>=2.9",
+    "pytz>=2024.1",
+    "kiteconnect>=5.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "types-pytz",
+    "types-PyYAML",
+]
+
+[project.scripts]
+billionaire = "billionaire.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+billionaire = ["storage/schema.sql", "config/*.yaml"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["ui", "data", "logs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.10"
+strict_optional = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+exclude = "ui|data|logs"

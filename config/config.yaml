@@ -1,0 +1,40 @@
+# Sample runtime configuration. Values here are informational — the source of
+# truth for the running app is .env (see .env.example). This file documents
+# expected structure for operators.
+
+app:
+  mode: analysis         # analysis | paper | live
+  account_capital: 100000
+  risk_per_trade_pct: 0.75
+  max_daily_loss_pct: 2.0
+  max_open_positions: 5
+  max_trades_per_day: 10
+  cooldown_after_losses: 2
+
+market:
+  timezone: Asia/Kolkata
+  open: "09:15"
+  close: "15:30"
+  square_off: "15:20"
+
+watchlist:
+  indices:
+    - NSE:NIFTY 50
+    - NSE:NIFTY BANK
+  equity:
+    - NSE:RELIANCE
+    - NSE:HDFCBANK
+    - NSE:INFY
+    - NSE:TCS
+    - NSE:TATASTEEL
+  derivatives:
+    # Populated at runtime from instrument master (current weekly expiry).
+    auto_load_current_expiry: true
+
+timeframes: ["1m", "3m", "5m", "15m", "1h"]
+
+exposure_caps:
+  options_buying_max_capital_pct: 15
+  options_selling_max_capital_pct: 35
+  futures_max_capital_pct: 50
+  equity_intraday_max_capital_pct: 60
