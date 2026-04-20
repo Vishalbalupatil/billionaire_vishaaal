@@ -59,7 +59,11 @@ class PaperBroker(BrokerClient):
             trig = order.request.trigger_price or 0.0
             limit = order.request.limit_price or 0.0
             side = order.request.side
-            if ot == OrderType.SL_M:
+            if ot == OrderType.MARKET:
+                # MARKET orders placed before the first tick are filled as
+                # soon as an LTP arrives for the instrument.
+                self._fill(order, price)
+            elif ot == OrderType.SL_M:
                 if (side == Side.BUY and price >= trig) or (side == Side.SELL and price <= trig):
                     self._fill(order, price)
             elif ot == OrderType.SL:

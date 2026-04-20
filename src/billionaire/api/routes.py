@@ -56,6 +56,8 @@ class SimSignalIn(BaseModel):
     target1: float
     target2: float | None = None
     confidence: float = 0.6
+    instrument_token: int = 0
+    seed_ltp: bool = True
 
 
 def build_router() -> APIRouter:
@@ -151,7 +153,7 @@ def build_router() -> APIRouter:
     def sim_signal(s: SimSignalIn) -> dict[str, Any]:
         """Feed a hand-crafted signal to the order manager — demo/paper only."""
         inst = Instrument(
-            instrument_token=0,
+            instrument_token=s.instrument_token,
             tradingsymbol=s.symbol,
             exchange=Exchange(s.exchange),
             segment=Segment.INDEX if s.symbol.upper() in {"NIFTY", "BANKNIFTY"} else Segment.EQUITY,
@@ -170,7 +172,12 @@ def build_router() -> APIRouter:
             regime=MarketRegime.UNKNOWN,
             strategy=s.strategy,
         )
-        return get_runtime().orders.handle_signal(sig)
+        r = get_runtime()
+        if s.seed_ltp:
+            # Seed the paper broker's LTP cache at the signal's entry price so
+            # demo MARKET orders fill deterministically without a separate tick.
+            r.paper_broker.on_ltp(s.instrument_token, s.entry)
+        return r.orders.handle_signal(sig)
 
     @router.post("/orders/manual")
     def manual_order(o: ManualOrderIn) -> dict[str, Any]:
