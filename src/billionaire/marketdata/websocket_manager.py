@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -98,18 +97,16 @@ class WebSocketManager:
         ticker.on_reconnect = self._on_reconnect
         ticker.on_order_update = self._on_order_update
 
-        def _runner() -> None:
-            while True:
-                try:
-                    ticker.connect(threaded=False)
-                except (RuntimeError, OSError) as e:
-                    log.exception("ticker crashed, retrying: %s", e)
-                    self._connected = False
-                # backoff up to 60s
-                self._reconnect_attempts += 1
-                time.sleep(min(60, 2 ** min(self._reconnect_attempts, 6)))
-
-        threading.Thread(target=_runner, name="kite-ws", daemon=True).start()
+        # ``threaded=True`` spawns an internal Twisted reactor thread with
+        # ``installSignalHandlers=False`` — required because we're not running
+        # on the main thread and signal.signal() fails otherwise. Reconnection
+        # is handled internally by KiteTicker (``on_reconnect`` callback +
+        # ReconnectingClientFactory), so we don't need an outer retry loop.
+        try:
+            ticker.connect(threaded=True)
+        except (RuntimeError, OSError) as e:
+            log.exception("ticker connect failed: %s", e)
+            return False
         return True
 
     # ---- ticker callbacks ----
