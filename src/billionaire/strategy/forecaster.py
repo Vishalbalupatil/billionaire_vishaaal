@@ -177,7 +177,9 @@ def synthetic_closes(n: int = 120, seed: int = 7, last: float = 24800.0) -> list
     rng = np.random.default_rng(seed)
     rets = rng.normal(loc=0.00005, scale=0.0018, size=n)
     arr = np.empty(n)
-    arr[0] = last * math.exp(-np.sum(rets))  # so the series ends at ~``last``
+    # The loop only applies rets[1..n-1], so only those are subtracted from
+    # the seed to keep arr[-1] pinned near ``last``.
+    arr[0] = last * math.exp(-np.sum(rets[1:]))
     for i in range(1, n):
         arr[i] = arr[i - 1] * math.exp(rets[i])
     return [float(x) for x in arr]

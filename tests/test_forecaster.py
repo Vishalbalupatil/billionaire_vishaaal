@@ -21,7 +21,9 @@ def test_synthetic_closes_is_deterministic_and_reasonable() -> None:
     b = synthetic_closes(n=100, seed=7, last=24800.0)
     assert a == b
     assert len(a) == 100
-    assert abs(a[-1] - 24800.0) / 24800.0 < 0.02  # ends near the anchor
+    # Series must land exactly on the anchor — the seed is chosen so that
+    # summing rets[1:] through the forward loop reconstructs ``last``.
+    assert a[-1] == pytest.approx(24800.0, rel=1e-12)
 
 
 def test_intraday_forecast_shape_and_band_widens() -> None:

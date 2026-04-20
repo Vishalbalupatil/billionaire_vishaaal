@@ -232,14 +232,16 @@ def build_router() -> APIRouter:
             inst = r.instruments.by_symbol(f"NSE:{symbol}") or r.instruments.by_symbol(symbol)
             if inst is not None:
                 inst_token = inst.instrument_token
-        # Try to gather recent completed 1m candles from the builder.
+        # Pull recent completed 1m candles from the builder's ring buffer.
         if inst_token:
-            cb = r.candle_builder
-            # Best-effort: pull from internal state (kept simple to avoid
-            # reaching into private APIs).
-            cur = cb.current_candle(inst_token, "1m")
-            if cur is not None:
-                closes = [cur.close]
+            recent = r.candle_builder.recent_candles(inst_token, "1m", n=120)
+            closes = [c.close for c in recent]
+            # Include the currently-forming bar as the freshest close when
+            # available — this matters for slow symbols where the last
+            # completed bar is already a minute old.
+            cur = r.candle_builder.current_candle(inst_token, "1m")
+            if cur is not None and (not recent or cur.ts > recent[-1].ts):
+                closes.append(cur.close)
         if len(closes) < 20:
             closes = synthetic_closes(n=120)
             source = "synthetic"

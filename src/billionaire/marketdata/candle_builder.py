@@ -8,10 +8,16 @@ which the UI and intra-bar strategies can use.
 from __future__ import annotations
 
 import threading
+from collections import deque
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from billionaire.models import Candle, Tick
+
+# How many completed candles to keep per (token, timeframe). The forecaster
+# needs >= 20 closes to run; 240 covers 4h of 1-minute bars and keeps memory
+# predictable even with the full Nifty 50 universe subscribed.
+HISTORY_MAX: int = 240
 
 # Supported timeframes -> seconds
 TIMEFRAMES: dict[str, int] = {
@@ -66,6 +72,7 @@ class CandleBuilder:
         self,
         timeframes: list[str] | None = None,
         on_candle: OnCandle | None = None,
+        history_size: int = HISTORY_MAX,
     ) -> None:
         tfs = timeframes or list(TIMEFRAMES.keys())
         for tf in tfs:
@@ -73,10 +80,20 @@ class CandleBuilder:
                 raise ValueError(f"Unsupported timeframe: {tf}")
         self._tfs: dict[str, int] = {tf: TIMEFRAMES[tf] for tf in tfs}
         self._state: dict[tuple[int, str], _BucketState] = {}
+        self._history: dict[tuple[int, str], deque[Candle]] = {}
+        self._history_size = history_size
         self._lock = threading.RLock()
         self._callbacks: list[OnCandle] = []
         if on_candle:
             self._callbacks.append(on_candle)
+
+    def _record_history(self, candle: Candle) -> None:
+        key = (candle.instrument_token, candle.timeframe)
+        dq = self._history.get(key)
+        if dq is None:
+            dq = deque(maxlen=self._history_size)
+            self._history[key] = dq
+        dq.append(candle)
 
     def subscribe(self, cb: OnCandle) -> None:
         self._callbacks.append(cb)
@@ -115,6 +132,7 @@ class CandleBuilder:
                         ts=state.start,
                     )
                     completed.append(candle)
+                    self._record_history(candle)
                     self._state[key] = _BucketState(tick.ltp, tick.volume, tick.oi, start)
                 else:
                     state.update(tick.ltp, tick.volume, tick.oi)
@@ -151,20 +169,47 @@ class CandleBuilder:
             for (token, tf), state in list(self._state.items()):
                 seconds = self._tfs[tf]
                 if current - state.start >= timedelta(seconds=seconds):
-                    completed.append(
-                        Candle(
-                            instrument_token=token,
-                            timeframe=tf,
-                            open=state.open,
-                            high=state.high,
-                            low=state.low,
-                            close=state.close,
-                            volume=state.volume,
-                            oi=state.oi,
-                            ts=state.start,
-                        )
+                    candle = Candle(
+                        instrument_token=token,
+                        timeframe=tf,
+                        open=state.open,
+                        high=state.high,
+                        low=state.low,
+                        close=state.close,
+                        volume=state.volume,
+                        oi=state.oi,
+                        ts=state.start,
                     )
+                    completed.append(candle)
+                    self._record_history(candle)
                     del self._state[(token, tf)]
         for c in completed:
             self._emit(c)
         return completed
+
+    def recent_candles(self, token: int, timeframe: str, n: int | None = None) -> list[Candle]:
+        """Return up to ``n`` most recent *completed* candles (oldest first).
+
+        Used by the forecast endpoint to assemble a close series from real
+        market data. Returns ``[]`` if nothing has completed yet.
+        """
+        with self._lock:
+            dq = self._history.get((token, timeframe))
+            if not dq:
+                return []
+            if n is None or n >= len(dq):
+                return list(dq)
+            return list(dq)[-n:]
+
+    def seed_history(self, token: int, timeframe: str, candles: list[Candle]) -> None:
+        """Preload the completed-candle buffer (e.g. from historical REST API)."""
+        if not candles:
+            return
+        key = (token, timeframe)
+        with self._lock:
+            dq = self._history.get(key)
+            if dq is None:
+                dq = deque(maxlen=self._history_size)
+                self._history[key] = dq
+            for c in candles:
+                dq.append(c)

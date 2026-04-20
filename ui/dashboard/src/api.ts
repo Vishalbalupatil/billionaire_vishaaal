@@ -92,6 +92,37 @@ export interface PortfolioResp {
   count_short: number;
 }
 
+export type ForecastHorizon = "intraday" | "daily" | "bias";
+
+export interface ForecastPoint {
+  step: number;
+  ts: string;
+  price: number;
+  lower: number;
+  upper: number;
+}
+
+export interface ForecastResp {
+  symbol: string;
+  horizon: ForecastHorizon;
+  source: "live" | "synthetic";
+  last_price: number;
+  drift_per_step: number;
+  vol_per_step: number;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  confidence: number;
+  notes: string;
+  disclaimer: string;
+  points: ForecastPoint[];
+}
+
+export interface UniverseResp {
+  index: string;
+  futures_underlying: string;
+  options_underlying: string;
+  equities: string[];
+}
+
 export const api = {
   health: () => j<HealthResp>(`${BASE}/health`),
   config: () => j<Record<string, unknown>>(`${BASE}/config`),
@@ -105,4 +136,7 @@ export const api = {
   squareOff: () => j(`${BASE}/square-off`, { method: "POST" }),
   simSignal: (body: Record<string, unknown>) =>
     j(`${BASE}/sim/signal`, { method: "POST", body: JSON.stringify(body) }),
+  universe: () => j<UniverseResp>(`${BASE}/universe`),
+  forecast: (symbol: string, horizon: ForecastHorizon, steps = 30) =>
+    j<ForecastResp>(`${BASE}/forecast?symbol=${encodeURIComponent(symbol)}&horizon=${horizon}&steps=${steps}`),
 };
