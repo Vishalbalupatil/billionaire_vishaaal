@@ -38,3 +38,4 @@ ui/dashboard/.vite/
 .vscode/
 .idea/
 .DS_Store
+*.tsbuildinfo

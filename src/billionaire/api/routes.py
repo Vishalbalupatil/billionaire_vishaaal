@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -22,6 +23,14 @@ from billionaire.models import (
     SignalDirection,
 )
 from billionaire.runtime import get_runtime
+from billionaire.services.orb_service import (
+    compute_deterministic_scenarios,
+    current_break,
+    evaluate_probability,
+    get_orb_service,
+    synth_today_snapshot,
+    today_from_cache,
+)
 from billionaire.strategy.forecaster import forecast as _forecast
 from billionaire.strategy.forecaster import synthetic_closes
 
@@ -190,8 +199,6 @@ def build_router() -> APIRouter:
     @router.post("/tick")
     def ingest_tick(tick: TickIn) -> dict[str, Any]:
         """Accept an external tick (useful for demos / paper simulation)."""
-        from datetime import datetime
-
         from billionaire.models import Tick
 
         t = Tick(
@@ -342,5 +349,77 @@ def build_router() -> APIRouter:
     def square_off() -> dict[str, Any]:
         closed = get_runtime().orders.auto_square_off()
         return {"closed": len(closed), "orders": [c.model_dump() for c in closed]}
+
+    # ----- ORB strategy --------------------------------------------------
+
+    @router.get("/backtest/orb")
+    def backtest_orb(refresh: bool = False) -> dict[str, Any]:
+        """Return the most recent ORB backtest artefact + metrics.
+
+        ``refresh=true`` forces the service to re-read the JSON on disk,
+        useful after the operator runs ``billionaire backtest-orb``.
+        """
+        svc = get_orb_service()
+        if refresh:
+            svc.refresh()
+        artefact = svc.artefact()
+        prob = svc.probability_ctx()
+        return {
+            **artefact,
+            "probability_model": {
+                "trained": prob.model is not None,
+                "n_samples": prob.n_samples,
+                "reason": prob.reason,
+                "classes": prob.model.classes if prob.model else [],
+            },
+        }
+
+    @router.get("/forecast/orb-today")
+    def forecast_orb_today(mode: str = "both") -> dict[str, Any]:
+        """Today's ORB snapshot — supports ``mode=scenario|probability|both``.
+
+        Falls back through layers: local SQLite cache → runtime live candle
+        history → synthetic snapshot, so the endpoint never 500s.
+        """
+        mode = mode.lower()
+        if mode not in {"scenario", "probability", "both"}:
+            raise HTTPException(400, f"unknown mode: {mode!r}")
+
+        snapshot = today_from_cache()
+        synth_bars = None
+        if snapshot is None or not snapshot.or_formed:
+            snapshot, synth_bars = synth_today_snapshot()
+        bars = synth_bars or []
+
+        payload: dict[str, Any] = {
+            "snapshot": snapshot.to_dict(),
+            "current_break": current_break(bars) if bars else None,
+        }
+
+        if snapshot.or_formed and snapshot.or_high and snapshot.or_low and snapshot.spot:
+            vix = snapshot.vix or 15.0
+            if mode in {"scenario", "both"}:
+                payload["scenario"] = compute_deterministic_scenarios(
+                    or_high=snapshot.or_high, or_low=snapshot.or_low,
+                    spot=snapshot.spot, vix_value=vix,
+                )
+            if mode in {"probability", "both"}:
+                svc = get_orb_service()
+                prob = svc.probability_ctx()
+                probs = evaluate_probability(
+                    prob,
+                    or_high=snapshot.or_high, or_low=snapshot.or_low,
+                    prev_close=snapshot.or_low,
+                    today_open=snapshot.or_low,
+                    vix_value=vix, prev_day_return_pct=0.0,
+                    weekday=datetime.fromisoformat(snapshot.trading_date).weekday(),
+                )
+                payload["probability"] = {
+                    "probs": probs,
+                    "model_trained": prob.model is not None,
+                    "n_samples": prob.n_samples,
+                    "reason": prob.reason,
+                }
+        return payload
 
     return router

@@ -123,6 +123,122 @@ export interface UniverseResp {
   equities: string[];
 }
 
+// ---- ORB strategy types ----
+
+export interface ORBTrade {
+  date: string;
+  side: "LONG" | "SHORT";
+  or_high: number;
+  or_low: number;
+  entry_ts: string;
+  entry_price: number;
+  stop_price: number;
+  target_price: number;
+  exit_ts: string;
+  exit_price: number;
+  exit_reason: "stop" | "target" | "eod";
+  futures_pnl_points: number;
+  futures_pnl_rupees: number;
+  option_type: "CE" | "PE";
+  option_strike: number;
+  option_entry_premium: number;
+  option_exit_premium: number;
+  option_pnl_rupees: number;
+  vix_at_entry: number;
+  combined_pnl_rupees: number;
+  r_multiple: number;
+  bars_held: number;
+}
+
+export interface ORBMetrics {
+  total_trades: number;
+  wins: number;
+  losses: number;
+  no_trade_days: number;
+  win_rate_pct: number;
+  avg_r_multiple: number;
+  best_trade_rupees: number;
+  worst_trade_rupees: number;
+  total_pnl_rupees: number;
+  futures_pnl_rupees: number;
+  options_pnl_rupees: number;
+  max_drawdown_rupees: number;
+  sharpe_ratio: number;
+}
+
+export interface EquityPoint {
+  date: string;
+  equity: number;
+}
+
+export interface ORBBacktestResp {
+  trades: ORBTrade[];
+  equity_curve_combined: EquityPoint[];
+  equity_curve_futures: EquityPoint[];
+  equity_curve_options: EquityPoint[];
+  metrics: ORBMetrics;
+  params: Record<string, unknown>;
+  data_source: "synthetic" | "live-cache";
+  generated_at?: string;
+  probability_model: {
+    trained: boolean;
+    n_samples: number;
+    reason: string;
+    classes: string[];
+  };
+}
+
+export interface ORBScenario {
+  entry: number;
+  stop: number;
+  target: number;
+  futures_pnl_rupees: number;
+  option_entry_premium: number;
+  option_target_premium: number;
+  option_pnl_rupees: number;
+}
+
+export interface ORBTodayResp {
+  snapshot: {
+    trading_date: string;
+    or_formed: boolean;
+    or_high: number | null;
+    or_low: number | null;
+    or_ts: string | null;
+    spot: number | null;
+    vix: number | null;
+    now_ts: string;
+    bars_seen: number;
+    source: "live" | "cache" | "synthetic";
+  };
+  current_break: {
+    side: "LONG" | "SHORT";
+    ts: string;
+    entry_price: number;
+    stop_price: number;
+    target_price: number;
+  } | null;
+  scenario?: {
+    now_ts: string;
+    or_high: number;
+    or_low: number;
+    spot: number;
+    vix: number;
+    atm_strike: number;
+    rr: number;
+    call_now_premium: number;
+    put_now_premium: number;
+    long_scenario: ORBScenario;
+    short_scenario: ORBScenario;
+  };
+  probability?: {
+    probs: Record<string, number>;
+    model_trained: boolean;
+    n_samples: number;
+    reason: string;
+  };
+}
+
 export const api = {
   health: () => j<HealthResp>(`${BASE}/health`),
   config: () => j<Record<string, unknown>>(`${BASE}/config`),
@@ -139,4 +255,8 @@ export const api = {
   universe: () => j<UniverseResp>(`${BASE}/universe`),
   forecast: (symbol: string, horizon: ForecastHorizon, steps = 30) =>
     j<ForecastResp>(`${BASE}/forecast?symbol=${encodeURIComponent(symbol)}&horizon=${horizon}&steps=${steps}`),
+  orbBacktest: (refresh = false) =>
+    j<ORBBacktestResp>(`${BASE}/backtest/orb${refresh ? "?refresh=true" : ""}`),
+  orbToday: (mode: "scenario" | "probability" | "both" = "both") =>
+    j<ORBTodayResp>(`${BASE}/forecast/orb-today?mode=${mode}`),
 };
