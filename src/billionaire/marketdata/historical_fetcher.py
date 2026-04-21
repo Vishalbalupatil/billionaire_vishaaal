@@ -244,38 +244,60 @@ NIFTY50_INDEX_TOKEN = 256265
 INDIA_VIX_TOKEN = 264969
 
 
+def _is_futures_instrument(inst: Any) -> bool:
+    """Identify a futures contract. Kite exposes ``segment`` as ``"NFO-FUT"``
+    etc. in the raw master but our :class:`~billionaire.models.Instrument`
+    normalises it to the :class:`~billionaire.models.Segment` enum (whose
+    ``FUTURES`` value is the string ``"FUTURES"``). We also fall back to
+    the ``tradingsymbol`` suffix for robustness against future schema drift.
+    """
+    seg = getattr(inst, "segment", None)
+    seg_val = getattr(seg, "value", seg)
+    if seg_val == "FUTURES":
+        return True
+    sym = str(getattr(inst, "tradingsymbol", "")).upper()
+    return sym.endswith("FUT")
+
+
 def resolve_front_month_future_token(
     instruments: object,
     underlying: str = "NIFTY",
     now: datetime | None = None,
 ) -> int:
     """Look up the current-month NIFTY futures instrument_token from an
-    :class:`InstrumentMaster`. Returns ``0`` if no match.
+    :class:`InstrumentMaster`.
+
+    Raises :class:`LookupError` if no matching contract is found so the
+    caller can surface an actionable error (returning ``0`` would otherwise
+    propagate into Kite's ``historical_data`` as an "invalid token" error).
 
     Current-month = the nearest monthly expiry whose date is on or after
-    ``now.date()``. If the back-month is closer (expiry week roll), we
-    intentionally keep the current month — rolling by calendar-week would
-    need a more nuanced volume/OI check which is outside the scope of this
-    module.
+    ``now.date()``. Roll semantics intentionally stay calendar-based.
     """
     if instruments is None:
-        return 0
+        raise LookupError("instrument master is not loaded")
     reference = now or datetime.now(IST).replace(tzinfo=None)
-    # Underlying is typically ``"NIFTY"`` which matches Kite's ``name``
-    # field on the futures contract. The ``by_underlying`` helper (if it
-    # exists) is preferred; otherwise fall back to scanning ``__iter__``.
-    candidates: list[Any] = []
+    # Prefer the targeted ``by_underlying`` helper (O(n) once vs O(n) per
+    # call via iteration), fall back to scanning ``__iter__``.
+    raw: list[Any]
     if hasattr(instruments, "by_underlying"):
-        candidates = list(
+        raw = list(
             instruments.by_underlying(underlying)  # type: ignore[attr-defined]
         )
     else:
-        for inst in getattr(instruments, "__iter__", lambda: iter([]))():
-            if getattr(inst, "name", "") == underlying and getattr(
-                inst, "segment", None
-            ) == "FUTURES":
-                candidates.append(inst)
-    # Pick the earliest expiry on or after today.
+        raw = [
+            inst
+            for inst in getattr(instruments, "__iter__", lambda: iter([]))()
+            if (getattr(inst, "name", "") or "").upper() == underlying.upper()
+        ]
+    candidates = [c for c in raw if _is_futures_instrument(c)]
+    if not candidates:
+        raise LookupError(
+            f"no futures contracts found for underlying {underlying!r} "
+            f"(scanned {len(raw)} same-name instruments). "
+            "Is the NFO segment loaded in the instrument master?"
+        )
+
     def _expiry_as_date(inst: Any) -> date | None:
         exp = getattr(inst, "expiry", None)
         if exp is None:
@@ -287,13 +309,17 @@ def resolve_front_month_future_token(
         except ValueError:
             return None
 
-    eligible = []
+    eligible: list[tuple[date, Any]] = []
     for c in candidates:
         exp = _expiry_as_date(c)
         if exp is None or exp < reference.date():
             continue
         eligible.append((exp, c))
     if not eligible:
-        return 0
+        raise LookupError(
+            f"no front-month futures contract found for {underlying!r} "
+            f"as of {reference.date().isoformat()} "
+            f"({len(candidates)} candidates, all expired)"
+        )
     eligible.sort(key=lambda p: p[0])
     return int(eligible[0][1].instrument_token)

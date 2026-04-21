@@ -74,6 +74,8 @@ def _cmd_backtest_orb(args: argparse.Namespace) -> int:
     years = int(args.years)
 
     futures_token = int(args.futures_token) if args.futures_token else 0
+    spot_proxy = bool(getattr(args, "spot_proxy", False))
+
     if not args.skip_fetch:
         runtime = get_runtime()
         broker = runtime.live_broker
@@ -86,13 +88,11 @@ def _cmd_backtest_orb(args: argparse.Namespace) -> int:
             )
             return 2
 
-        if not futures_token:
-            # Lazily load instrument master to find the front-month future.
+        if not futures_token and not spot_proxy:
             instruments = runtime.instruments
             if instruments is None:
                 print("ERROR: instrument master unavailable", file=sys.stderr)
                 return 2
-            # Ensure it's loaded; .load() is idempotent.
             try:
                 instruments.load()  # type: ignore[attr-defined]
             except Exception as e:  # pragma: no cover — network dependent
@@ -101,48 +101,89 @@ def _cmd_backtest_orb(args: argparse.Namespace) -> int:
                 futures_token = resolve_front_month_future_token(
                     instruments, underlying="NIFTY"
                 )
+                print(
+                    f"Resolved NIFTY front-month futures token = {futures_token}"
+                )
             except (LookupError, AttributeError) as e:
                 print(
-                    f"ERROR: couldn't resolve NIFTY front-month futures token: "
-                    f"{e}. Re-run with --futures-token <TOKEN>.",
+                    f"WARN: couldn't resolve NIFTY front-month futures token "
+                    f"({e}). Falling back to spot proxy — the backtest will "
+                    "treat NIFTY 50 index bars as the futures series, which "
+                    "loses basis/carry (~20-70 bps) but keeps the directional "
+                    "OR-break signal intact. Pass --futures-token <TOKEN> to "
+                    "override with an explicit token.",
+                    # (We intentionally don't document a 'fail hard' flag
+                    # — users who want that behaviour pass --futures-token
+                    # with a valid token; the resolver fail is the fail.)
                     file=sys.stderr,
                 )
-                return 2
-            print(f"Resolved NIFTY front-month futures token = {futures_token}")
+                spot_proxy = True
+
+        tokens_to_fetch = [NIFTY50_INDEX_TOKEN, INDIA_VIX_TOKEN]
+        if futures_token and not spot_proxy:
+            tokens_to_fetch.insert(0, futures_token)
 
         cache = HistoricalCache(cache_path)
         try:
             print(
-                f"Fetching {years}y of 5m bars for "
-                f"[fut={futures_token}, spot={NIFTY50_INDEX_TOKEN}, "
-                f"vix={INDIA_VIX_TOKEN}]…"
+                f"Fetching {years}y of 5m bars for tokens={tokens_to_fetch}…"
             )
             results = backfill_last_n_years(
                 broker, cache,
-                tokens=[futures_token, NIFTY50_INDEX_TOKEN, INDIA_VIX_TOKEN],
+                tokens=tokens_to_fetch,
                 timeframe="5m", years=years,
             )
             for r in results:
                 print(
-                    f"  token={r.token} chunks={r.chunks} bars_written={r.bars_written}"
+                    f"  token={r.token} chunks={r.chunks} "
+                    f"bars_written={r.bars_written}"
                 )
+            # If the Kite fetch returned zero futures bars (e.g. NFO
+            # historical-data entitlement missing), silently degrade to
+            # spot proxy rather than crashing downstream.
+            if futures_token and not spot_proxy:
+                fut_result = next(
+                    (r for r in results if r.token == futures_token), None
+                )
+                # bars_written==0 can legitimately mean "cache already had
+                # everything" (see historical_fetcher.fetch_and_cache early
+                # return). We only treat a 0-bar result as a failure when
+                # chunks>0, i.e. Kite was actually queried and came back empty.
+                if (
+                    fut_result is not None
+                    and fut_result.chunks > 0
+                    and fut_result.bars_written == 0
+                ):
+                    print(
+                        f"WARN: Kite returned 0 bars for futures token "
+                        f"{futures_token} — falling back to spot proxy.",
+                        file=sys.stderr,
+                    )
+                    spot_proxy = True
         finally:
             cache.close()
     else:
-        if not futures_token:
+        if not futures_token and not spot_proxy:
             print(
-                "ERROR: --skip-fetch requires --futures-token <TOKEN>",
+                "ERROR: --skip-fetch requires --futures-token <TOKEN> or "
+                "--spot-proxy.",
                 file=sys.stderr,
             )
             return 2
 
     print("Running ORB backtest…")
+    if spot_proxy:
+        print(
+            "  (spot-proxy mode: futures leg approximated from NIFTY 50 "
+            "index bars)"
+        )
     result, out_path = run_and_persist_backtest(
         years=years,
         cache_path=cache_path,
-        futures_token=futures_token,
+        futures_token=futures_token or NIFTY50_INDEX_TOKEN,
         rr=float(args.rr),
         artefact_path=artefact_path,
+        allow_spot_proxy=spot_proxy,
     )
     print(f"  → {len(result.trades)} trades, "
           f"win_rate={result.metrics.win_rate_pct:.2f}%, "
@@ -191,6 +232,13 @@ def main(argv: list[str] | None = None) -> int:
     ob.add_argument(
         "--skip-fetch", action="store_true",
         help="skip the Kite REST pull and use whatever is already cached",
+    )
+    ob.add_argument(
+        "--spot-proxy", action="store_true",
+        help=(
+            "skip front-month futures resolution + fetch; use NIFTY 50 "
+            "index bars as a directional proxy for the futures leg"
+        ),
     )
     ob.set_defaults(func=_cmd_backtest_orb)
 

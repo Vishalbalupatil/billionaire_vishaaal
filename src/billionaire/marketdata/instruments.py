@@ -66,3 +66,21 @@ class InstrumentMaster:
     def __len__(self) -> int:
         with self._lock:
             return len(self._by_token)
+
+    def __iter__(self) -> Iterable[Instrument]:
+        """Snapshot iterator over all loaded instruments.
+
+        Returns a list snapshot (not a live view) so callers can iterate
+        without holding the lock. Used by the ORB front-month futures
+        resolver to scan the full NFO master.
+        """
+        with self._lock:
+            return iter(list(self._by_token.values()))
+
+    def by_underlying(self, underlying: str) -> list[Instrument]:
+        """All instruments whose ``name`` matches ``underlying`` (e.g. NIFTY
+        futures + options contracts). Case-insensitive; includes every
+        segment, so callers must filter further if they only want FUT/OPT."""
+        u = underlying.upper()
+        with self._lock:
+            return [i for i in self._by_token.values() if (i.name or "").upper() == u]

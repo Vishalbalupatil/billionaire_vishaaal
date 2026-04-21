@@ -648,12 +648,19 @@ def run_and_persist_backtest(
     vix_token: int = 264969,
     rr: float = 2.0,
     artefact_path: Path = DEFAULT_ARTEFACT_PATH,
+    allow_spot_proxy: bool = False,
 ) -> tuple[ORBBacktestResult, Path]:
     """Run the ORB backtest against the local cache and persist the result.
 
     This does NOT call Kite — callers must pre-populate the cache with
     ``backfill_last_n_years`` or similar. Separating the fetch step from
     the compute step keeps tests offline and makes failure modes obvious.
+
+    When ``allow_spot_proxy`` is true and the futures cache is empty, the
+    backtest falls back to spot bars as the "futures" series. This loses
+    the ~20-70 bps basis/carry but preserves directional OR-break signals,
+    which is the honest approximation when the futures leg is unavailable
+    (e.g. historical-data entitlement missing on NFO).
     """
     cache = HistoricalCache(cache_path)
     try:
@@ -662,7 +669,7 @@ def run_and_persist_backtest(
         fut_bars = bars_from_cache(
             cache, token=futures_token, timeframe="5m",
             from_ts=from_ts, to_ts=to_ts,
-        )
+        ) if futures_token else []
         spot_bars = bars_from_cache(
             cache, token=spot_token, timeframe="5m",
             from_ts=from_ts, to_ts=to_ts,
@@ -674,10 +681,14 @@ def run_and_persist_backtest(
     finally:
         cache.close()
     if not fut_bars:
-        raise RuntimeError(
-            f"historical cache has no futures bars for token {futures_token}; "
-            "run the fetcher first"
-        )
+        if allow_spot_proxy and spot_bars:
+            fut_bars = spot_bars
+        else:
+            raise RuntimeError(
+                f"historical cache has no futures bars for token {futures_token}; "
+                "run the fetcher first, or pass allow_spot_proxy=True to use "
+                "spot bars as a directional proxy."
+            )
     result = run_backtest(
         futures_bars=fut_bars, spot_bars=spot_bars, vix_bars=vix_bars, rr=rr,
     )
