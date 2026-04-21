@@ -26,13 +26,20 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
 from billionaire.marketdata.candle_builder import CandleBuilder
 from billionaire.models import Candle
 
 log = logging.getLogger(__name__)
+
+# Kite Connect interprets ``from``/``to`` on historical_data as IST
+# (Asia/Kolkata, UTC+05:30). On a UTC server ``datetime.now()`` would be
+# ~5h30m behind real IST, making the requested window point at a dead
+# pre-market slot and returning empty/stale candles. Construct request
+# timestamps explicitly in IST.
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class _HistoricalDataSource(Protocol):
@@ -72,7 +79,6 @@ def _row_to_candle(token: int, row: dict[str, Any], timeframe: str = "1m") -> Ca
             return None
     if getattr(date, "tzinfo", None) is not None:
         # Convert to naive UTC to match CandleBuilder's internal convention.
-        from datetime import timezone
         date = date.astimezone(timezone.utc).replace(tzinfo=None)
     try:
         return Candle(
@@ -107,7 +113,7 @@ def seed_candle_history(
     if not tokens:
         return SeedResult(0, 0, 0, {})
 
-    to_dt = now or datetime.now()
+    to_dt = now or datetime.now(IST)
     from_dt = to_dt - timedelta(minutes=lookback_minutes)
 
     errors: dict[int, str] = {}

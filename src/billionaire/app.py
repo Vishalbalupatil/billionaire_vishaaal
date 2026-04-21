@@ -86,12 +86,18 @@ def _load_and_subscribe_watchlist(r) -> None:  # type: ignore[no-untyped-def]
     )
     if missing:
         log.info("Unresolved watchlist symbols: %s", missing)
+
+    # Seed before subscribing so historical bars land in the deque first.
+    # If we subscribed first, a minute boundary crossed during the ~N HTTP
+    # round-trips would let a live tick-built candle be appended *before*
+    # the older historical candles, producing an out-of-order series that
+    # corrupts np.diff(np.log(...)) in the forecaster.
+    if tokens and r.settings.seed_history_on_boot and r.live_broker is not None:
+        _seed_forecast_history(r, tokens)
+
     if tokens:
         r.ws.set_tokens(tokens)
         log.info("Subscribed KiteTicker to %d tokens", len(tokens))
-
-    if r.settings.seed_history_on_boot and r.live_broker is not None and tokens:
-        _seed_forecast_history(r, tokens)
 
 
 def _seed_forecast_history(r, tokens: list[int]) -> None:  # type: ignore[no-untyped-def]

@@ -139,3 +139,31 @@ def test_seed_candle_history_honours_lookback_minutes(lookback: int, expected_de
     _, from_dt, to_dt, _ = source.calls[0]
     assert (to_dt - from_dt).total_seconds() == expected_delta * 60
     assert to_dt == now
+
+
+def test_seed_candle_history_defaults_request_window_to_ist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When `now` isn't supplied, the window must be built in IST — not in
+    whatever the server's local timezone happens to be. Otherwise a UTC
+    server points the Kite request at a dead pre-market slot (~5.5h behind
+    real IST) and returns empty/stale candles."""
+    from billionaire.marketdata import history_seeder as hs
+
+    frozen_ist = datetime(2024, 6, 1, 10, 30, tzinfo=hs.IST)
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
+            return frozen_ist.astimezone(tz) if tz is not None else frozen_ist.replace(tzinfo=None)
+
+    monkeypatch.setattr(hs, "datetime", _FrozenDatetime)
+
+    source = _FakeSource({1: []})
+    cb = CandleBuilder(timeframes=["1m"])
+    seed_candle_history(source, cb, [1], lookback_minutes=60)
+
+    _, from_dt, to_dt, _ = source.calls[0]
+    assert to_dt.tzinfo is not None
+    # Must be IST, not UTC. IST offset is +05:30 = 19800 seconds.
+    assert to_dt.utcoffset() == timedelta(hours=5, minutes=30)
+    assert to_dt == frozen_ist
+    assert (to_dt - from_dt) == timedelta(minutes=60)
