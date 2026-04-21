@@ -111,7 +111,10 @@ def _cmd_backtest_orb(args: argparse.Namespace) -> int:
                     "treat NIFTY 50 index bars as the futures series, which "
                     "loses basis/carry (~20-70 bps) but keeps the directional "
                     "OR-break signal intact. Pass --futures-token <TOKEN> to "
-                    "override, or --no-spot-proxy to fail hard instead.",
+                    "override with an explicit token.",
+                    # (We intentionally don't document a 'fail hard' flag
+                    # — users who want that behaviour pass --futures-token
+                    # with a valid token; the resolver fail is the fail.)
                     file=sys.stderr,
                 )
                 spot_proxy = True
@@ -142,7 +145,15 @@ def _cmd_backtest_orb(args: argparse.Namespace) -> int:
                 fut_result = next(
                     (r for r in results if r.token == futures_token), None
                 )
-                if fut_result is not None and fut_result.bars_written == 0:
+                # bars_written==0 can legitimately mean "cache already had
+                # everything" (see historical_fetcher.fetch_and_cache early
+                # return). We only treat a 0-bar result as a failure when
+                # chunks>0, i.e. Kite was actually queried and came back empty.
+                if (
+                    fut_result is not None
+                    and fut_result.chunks > 0
+                    and fut_result.bars_written == 0
+                ):
                     print(
                         f"WARN: Kite returned 0 bars for futures token "
                         f"{futures_token} — falling back to spot proxy.",
