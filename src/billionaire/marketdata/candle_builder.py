@@ -202,14 +202,27 @@ class CandleBuilder:
             return list(dq)[-n:]
 
     def seed_history(self, token: int, timeframe: str, candles: list[Candle]) -> None:
-        """Preload the completed-candle buffer (e.g. from historical REST API)."""
+        """Preload the completed-candle buffer (e.g. from historical REST API).
+
+        If live ticks have already populated the deque by the time the
+        historical seed arrives (seed is allowed to run as a background task
+        while the WebSocket streams), merge the two by timestamp and dedupe
+        so the forecaster always sees a strictly chronological series. The
+        live candle wins on ties since it reflects actual observed ticks
+        through the moment of rollover, which matches reality better than
+        the broker's end-of-bar REST snapshot for the same minute.
+        """
         if not candles:
             return
         key = (token, timeframe)
         with self._lock:
-            dq = self._history.get(key)
-            if dq is None:
-                dq = deque(maxlen=self._history_size)
-                self._history[key] = dq
+            existing = list(self._history.get(key, ()))
+            by_ts: dict = {}
+            # Historical first, so existing (live) overrides on a timestamp tie.
             for c in candles:
-                dq.append(c)
+                by_ts[c.ts] = c
+            for c in existing:
+                by_ts[c.ts] = c
+            merged = sorted(by_ts.values(), key=lambda c: c.ts)
+            dq: deque[Candle] = deque(merged, maxlen=self._history_size)
+            self._history[key] = dq
