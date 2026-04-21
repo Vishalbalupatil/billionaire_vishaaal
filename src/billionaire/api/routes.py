@@ -385,11 +385,9 @@ def build_router() -> APIRouter:
         if mode not in {"scenario", "probability", "both"}:
             raise HTTPException(400, f"unknown mode: {mode!r}")
 
-        snapshot = today_from_cache()
-        synth_bars = None
+        snapshot, bars = today_from_cache()
         if snapshot is None or not snapshot.or_formed:
-            snapshot, synth_bars = synth_today_snapshot()
-        bars = synth_bars or []
+            snapshot, bars = synth_today_snapshot()
 
         payload: dict[str, Any] = {
             "snapshot": snapshot.to_dict(),
@@ -406,12 +404,30 @@ def build_router() -> APIRouter:
             if mode in {"probability", "both"}:
                 svc = get_orb_service()
                 prob = svc.probability_ctx()
+                # Use real prev-close + today-open when we have them from the
+                # cache; fall back to spot-based proxies so gap_pct and
+                # prev_day_return_pct aren't forced to zero.
+                prev_close = (
+                    snapshot.prev_close
+                    if snapshot.prev_close is not None
+                    else (snapshot.spot or snapshot.or_low)
+                )
+                today_open = (
+                    snapshot.today_open
+                    if snapshot.today_open is not None
+                    else (snapshot.spot or snapshot.or_low)
+                )
+                prev_ret = (
+                    snapshot.prev_day_return_pct
+                    if snapshot.prev_day_return_pct is not None
+                    else 0.0
+                )
                 probs = evaluate_probability(
                     prob,
                     or_high=snapshot.or_high, or_low=snapshot.or_low,
-                    prev_close=snapshot.or_low,
-                    today_open=snapshot.or_low,
-                    vix_value=vix, prev_day_return_pct=0.0,
+                    prev_close=prev_close,
+                    today_open=today_open,
+                    vix_value=vix, prev_day_return_pct=prev_ret,
                     weekday=datetime.fromisoformat(snapshot.trading_date).weekday(),
                 )
                 payload["probability"] = {

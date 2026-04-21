@@ -210,6 +210,9 @@ export interface ORBTodayResp {
     now_ts: string;
     bars_seen: number;
     source: "live" | "cache" | "synthetic";
+    prev_close: number | null;
+    today_open: number | null;
+    prev_day_return_pct: number | null;
   };
   current_break: {
     side: "LONG" | "SHORT";

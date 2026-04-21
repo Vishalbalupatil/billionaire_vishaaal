@@ -321,6 +321,12 @@ class TodaysORB:
     now_ts: str  # IST ISO
     bars_seen: int
     source: str  # "live" | "cache" | "synthetic"
+    # Extras used by the probability model (gap = today_open vs prev_close,
+    # prev_day_return_pct = prev_close vs prev_prev_close). Populated by
+    # ``today_from_cache`` when yesterday's bars are present, otherwise None.
+    prev_close: float | None = None
+    today_open: float | None = None
+    prev_day_return_pct: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -334,6 +340,9 @@ class TodaysORB:
             "now_ts": self.now_ts,
             "bars_seen": self.bars_seen,
             "source": self.source,
+            "prev_close": self.prev_close,
+            "today_open": self.today_open,
+            "prev_day_return_pct": self.prev_day_return_pct,
         }
 
 
@@ -471,6 +480,35 @@ def get_orb_service() -> ORBService:
 # ---------------------------------------------------------------------------
 
 
+def _prev_session_closes(
+    cache: HistoricalCache, token: int, today: date, lookback_days: int = 10
+) -> tuple[float | None, float | None]:
+    """Return ``(prev_close, prev_prev_close)`` by walking back from ``today``.
+
+    Uses the last bar of each prior trading day. Returns ``(None, None)``
+    if the cache has no history for the token. Used to fill the probability
+    model's ``gap_pct`` and ``prev_day_return_pct`` features so they aren't
+    both zero.
+    """
+    closes: list[float] = []
+    for i in range(1, lookback_days + 1):
+        day = today - timedelta(days=i)
+        if day.weekday() >= 5:
+            continue
+        from_ts = datetime.combine(day, time(9, 15))
+        to_ts = datetime.combine(day, time(15, 30))
+        bars = bars_from_cache(
+            cache, token=token, timeframe="5m", from_ts=from_ts, to_ts=to_ts,
+        )
+        if bars:
+            closes.append(bars[-1].close)
+        if len(closes) >= 2:
+            break
+    prev = closes[0] if closes else None
+    prev_prev = closes[1] if len(closes) >= 2 else None
+    return prev, prev_prev
+
+
 def today_from_cache(
     cache_path: Path = DEFAULT_CACHE_PATH,
     *,
@@ -478,16 +516,17 @@ def today_from_cache(
     spot_token: int = 256265,  # NIFTY 50 index
     vix_token: int = 264969,
     as_of: datetime | None = None,
-) -> TodaysORB | None:
+) -> tuple[TodaysORB | None, list[Bar]]:
     """Best-effort reconstruct today's ORB from the local SQLite cache.
 
-    Returns ``None`` if the cache file is missing or contains no bars for
-    today. Used as the primary data source for ``/api/forecast/orb-today``
-    — live tick data would be more precise but this works even when the
-    backend is stopped, and we only need the first 5m candle anyway.
+    Returns ``(None, [])`` if the cache file is missing or contains no bars
+    for today. Otherwise returns the snapshot plus the full list of today's
+    5m bars so callers can run post-OR break detection off the same data.
+    Previously we consumed the bars internally and only returned the
+    snapshot, which made ``current_break`` always ``None`` in the route.
     """
     if not cache_path.exists():
-        return None
+        return None, []
     now = as_of or datetime.now(IST).replace(tzinfo=None)
     today = now.date()
     # Pull the full trading-session window for today's date.
@@ -497,17 +536,26 @@ def today_from_cache(
         cache = HistoricalCache(cache_path)
     except Exception as e:  # pragma: no cover — defensive, shouldn't happen
         log.warning("failed to open historical cache: %s", e)
-        return None
+        return None, []
     try:
         token = futures_token or spot_token
-        bars = bars_from_cache(cache, token, "5m", from_ts, to_ts)
+        bars = bars_from_cache(
+            cache, token=token, timeframe="5m", from_ts=from_ts, to_ts=to_ts,
+        )
         if not bars:
-            return None
+            return None, []
         orr = find_opening_range(bars)
         spot_bar = bars[-1] if bars else None
-        vix_bars = bars_from_cache(cache, vix_token, "5m", from_ts, to_ts)
+        vix_bars = bars_from_cache(
+            cache, token=vix_token, timeframe="5m", from_ts=from_ts, to_ts=to_ts,
+        )
         vix_val = vix_bars[-1].close if vix_bars else None
-        return TodaysORB(
+        prev_close, prev_prev_close = _prev_session_closes(cache, token, today)
+        today_open = bars[0].open if bars else None
+        prev_ret_pct: float | None = None
+        if prev_close is not None and prev_prev_close:
+            prev_ret_pct = (prev_close - prev_prev_close) / prev_prev_close * 100.0
+        snap = TodaysORB(
             trading_date=today.isoformat(),
             or_formed=orr is not None,
             or_high=orr.high if orr else None,
@@ -518,7 +566,11 @@ def today_from_cache(
             now_ts=now.isoformat(),
             bars_seen=len(bars),
             source="cache",
+            prev_close=prev_close,
+            today_open=today_open,
+            prev_day_return_pct=prev_ret_pct,
         )
+        return snap, bars
     finally:
         cache.close()
 
@@ -607,9 +659,18 @@ def run_and_persist_backtest(
     try:
         to_ts = datetime.now(IST).replace(tzinfo=None)
         from_ts = to_ts - timedelta(days=int(years * 365.25))
-        fut_bars = bars_from_cache(cache, futures_token, "5m", from_ts, to_ts)
-        spot_bars = bars_from_cache(cache, spot_token, "5m", from_ts, to_ts)
-        vix_bars = bars_from_cache(cache, vix_token, "5m", from_ts, to_ts)
+        fut_bars = bars_from_cache(
+            cache, token=futures_token, timeframe="5m",
+            from_ts=from_ts, to_ts=to_ts,
+        )
+        spot_bars = bars_from_cache(
+            cache, token=spot_token, timeframe="5m",
+            from_ts=from_ts, to_ts=to_ts,
+        )
+        vix_bars = bars_from_cache(
+            cache, token=vix_token, timeframe="5m",
+            from_ts=from_ts, to_ts=to_ts,
+        )
     finally:
         cache.close()
     if not fut_bars:
