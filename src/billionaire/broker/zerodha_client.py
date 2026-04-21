@@ -97,6 +97,27 @@ class ZerodhaClient(BrokerClient):
         data = self._kite.instruments(exchange) if exchange else self._kite.instruments()
         return [self._to_instrument(d) for d in data]
 
+    def historical_data(
+        self,
+        instrument_token: int,
+        from_dt: Any,
+        to_dt: Any,
+        interval: str = "minute",
+        continuous: bool = False,
+        oi: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Proxy for ``kite.historical_data`` — returns OHLCV dicts.
+
+        Each row has keys ``date``, ``open``, ``high``, ``low``, ``close``,
+        ``volume`` and (when ``oi=True``) ``oi``. Requires the historical-data
+        entitlement on the Kite Connect subscription.
+        """
+        return list(
+            self._kite.historical_data(
+                instrument_token, from_dt, to_dt, interval, continuous=continuous, oi=oi
+            )
+        )
+
     def quote(self, symbols: list[str]) -> dict[str, dict[str, Any]]:
         return dict(self._kite.quote(symbols))
 

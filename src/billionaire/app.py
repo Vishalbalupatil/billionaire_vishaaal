@@ -16,6 +16,7 @@ from billionaire import __version__
 from billionaire.api.routes import build_router
 from billionaire.config import get_settings
 from billionaire.logging_setup import setup_logging
+from billionaire.marketdata.history_seeder import seed_candle_history
 from billionaire.marketdata.watchlist import load_watchlist_symbols, resolve_tokens
 from billionaire.runtime import get_runtime
 
@@ -88,6 +89,34 @@ def _load_and_subscribe_watchlist(r) -> None:  # type: ignore[no-untyped-def]
     if tokens:
         r.ws.set_tokens(tokens)
         log.info("Subscribed KiteTicker to %d tokens", len(tokens))
+
+    if r.settings.seed_history_on_boot and r.live_broker is not None and tokens:
+        _seed_forecast_history(r, tokens)
+
+
+def _seed_forecast_history(r, tokens: list[int]) -> None:  # type: ignore[no-untyped-def]
+    """Bootstrap the candle ring buffer from Kite REST so /api/forecast can
+    return `source=live` immediately instead of waiting ~20 min for ticks."""
+    if not hasattr(r.live_broker, "historical_data"):
+        log.info("Live broker lacks historical_data(); skipping history seed.")
+        return
+    try:
+        result = seed_candle_history(
+            r.live_broker,
+            r.candle_builder,
+            tokens,
+            lookback_minutes=r.settings.seed_history_lookback_minutes,
+        )
+    except Exception as e:  # pragma: no cover — defensive
+        log.warning("History seed failed: %s", e)
+        return
+    log.info(
+        "History seed: %d/%d tokens populated, %d candles loaded (errors=%d)",
+        result.tokens_seeded, result.tokens_requested,
+        result.candles_total, len(result.errors),
+    )
+    if result.errors:
+        log.info("History seed errors: %s", result.errors)
 
 
 @app.websocket("/ws")
