@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     market_close: str = "15:30"
     square_off_time: str = "15:20"
 
+    # Forecasting
+    seed_history_on_boot: bool = True
+    seed_history_lookback_minutes: int = 240
+
     # Storage
     database_url: str = "sqlite:///./data/billionaire.db"
 
