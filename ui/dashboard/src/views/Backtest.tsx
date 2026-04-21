@@ -138,43 +138,43 @@ export default function Backtest() {
             >
               <defs>
                 <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#d4af37" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#39e3ff" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#39e3ff" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid
-                stroke="rgba(212,175,55,0.10)"
+                stroke="rgba(130,200,255,0.08)"
                 strokeDasharray="3 3"
                 vertical={false}
               />
               <XAxis
                 dataKey="i"
-                tick={{ fill: "#6b5c3b", fontSize: 10 }}
-                axisLine={{ stroke: "rgba(212,175,55,0.22)" }}
+                tick={{ fill: "#556079", fontSize: 10 }}
+                axisLine={{ stroke: "rgba(130,200,255,0.15)" }}
                 tickLine={false}
               />
               <YAxis
                 domain={["dataMin - 1000", "dataMax + 1000"]}
-                tick={{ fill: "#6b5c3b", fontSize: 10 }}
-                axisLine={{ stroke: "rgba(212,175,55,0.22)" }}
+                tick={{ fill: "#556079", fontSize: 10 }}
+                axisLine={{ stroke: "rgba(130,200,255,0.15)" }}
                 tickLine={false}
                 width={64}
                 tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
               />
               <Tooltip
                 contentStyle={{
-                  background: "rgba(10,8,4,0.96)",
-                  border: "1px solid rgba(212,175,55,0.45)",
+                  background: "rgba(6,9,20,0.95)",
+                  border: "1px solid rgba(57,227,255,0.35)",
                   borderRadius: 8,
                   fontFamily: "JetBrains Mono",
                 }}
-                labelStyle={{ color: "#a58f5a" }}
+                labelStyle={{ color: "#7a88a8" }}
                 formatter={(v) => [`₹ ${fmt(Number(v))}`, "Equity"]}
               />
               <Area
                 type="monotone"
                 dataKey="equity"
-                stroke="#d4af37"
+                stroke="#39e3ff"
                 strokeWidth={1.8}
                 fill="url(#eqGrad)"
                 isAnimationActive={false}

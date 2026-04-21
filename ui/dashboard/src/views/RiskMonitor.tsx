@@ -184,7 +184,7 @@ function Row({
       className="row spread"
       style={{
         padding: "8px 0",
-        borderBottom: "1px dashed rgba(212,175,55,0.10)",
+        borderBottom: "1px dashed rgba(130,200,255,0.06)",
       }}
     >
       <span className="muted small">{label}</span>
@@ -198,7 +198,7 @@ function RingGauge({ pct }: { pct: number }) {
   const c = 2 * Math.PI * r;
   const dash = (pct / 100) * c;
   const color =
-    pct >= 80 ? "#c85a5a" : pct >= 50 ? "#f4d27a" : "#9fcf8a";
+    pct >= 80 ? "#ff5474" : pct >= 50 ? "#ffd36b" : "#6bff9e";
   return (
     <div className="ring-wrap">
       <svg width="160" height="160" viewBox="0 0 160 160">
@@ -207,7 +207,7 @@ function RingGauge({ pct }: { pct: number }) {
           cy="80"
           r={r}
           fill="none"
-          stroke="rgba(212,175,55,0.14)"
+          stroke="rgba(130,200,255,0.10)"
           strokeWidth="10"
         />
         <circle
