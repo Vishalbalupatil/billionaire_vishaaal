@@ -44,7 +44,7 @@ export default function Sparkline({
     v += (rand() - 0.5) * 2.4 + (positive ? 0.12 : -0.12);
     data.push({ x: i, y: v });
   }
-  const stroke = positive ? "#9fcf8a" : "#c85a5a";
+  const stroke = positive ? "#6bff9e" : "#ff5474";
   const gradId = `spark-${positive ? "up" : "dn"}-${seed.length}`;
 
   return (

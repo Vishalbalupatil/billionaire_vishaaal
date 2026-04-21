@@ -85,7 +85,7 @@ export default function Forecast() {
             className="col"
             style={{
               flex: "0 0 220px", marginLeft: 18, paddingLeft: 18,
-              borderLeft: "1px dashed rgba(212,175,55,0.18)",
+              borderLeft: "1px dashed rgba(130,200,255,0.15)",
             }}
           >
             <div className="muted tiny">BIAS</div>

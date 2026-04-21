@@ -173,8 +173,8 @@ export default function OptionChain() {
                   style={
                     isAtm
                       ? {
-                          outline: "1px solid rgba(212,175,55,0.40)",
-                          background: "rgba(212,175,55,0.06)",
+                          outline: "1px solid rgba(57,227,255,0.35)",
+                          background: "rgba(57,227,255,0.04)",
                         }
                       : undefined
                   }
@@ -299,7 +299,7 @@ function Pill({
       className="row spread"
       style={{
         padding: "8px 0",
-        borderBottom: "1px dashed rgba(212,175,55,0.10)",
+        borderBottom: "1px dashed rgba(130,200,255,0.06)",
       }}
     >
       <span className="muted small">{label}</span>

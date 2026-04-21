@@ -65,13 +65,13 @@ export default function ForecastChart({
   const bandPath = `M ${upper.join(" L ")} L ${lower.join(" L ")} Z`;
 
   const stroke =
-    bias === "BULLISH" ? "#9fcf8a" : bias === "BEARISH" ? "#c85a5a" : "#f4d27a";
+    bias === "BULLISH" ? "#6bff9e" : bias === "BEARISH" ? "#ff5474" : "#ffd36b";
   const bandFill =
     bias === "BULLISH"
-      ? "rgba(159,207,138,0.16)"
+      ? "rgba(107,255,158,0.14)"
       : bias === "BEARISH"
-      ? "rgba(200,90,90,0.16)"
-      : "rgba(244,210,122,0.14)";
+      ? "rgba(255,84,116,0.14)"
+      : "rgba(255,211,107,0.12)";
 
   const lastY = yOf(lastPrice);
   const firstProjY = yOf(points[points.length - 1].price);
@@ -98,7 +98,7 @@ export default function ForecastChart({
               x2={width - padX}
               y1={yOf(v)}
               y2={yOf(v)}
-              stroke="rgba(212,175,55,0.10)"
+              stroke="rgba(130,200,255,0.08)"
               strokeDasharray="2 4"
             />
             <text
@@ -106,7 +106,7 @@ export default function ForecastChart({
               y={yOf(v) + 3}
               fontSize="10"
               fontFamily="JetBrains Mono, monospace"
-              fill="rgba(212,175,55,0.6)"
+              fill="rgba(130,200,255,0.5)"
             >
               {v.toFixed(1)}
             </text>
@@ -122,7 +122,7 @@ export default function ForecastChart({
           x2={width - padX}
           y1={lastY}
           y2={lastY}
-          stroke="rgba(212,175,55,0.38)"
+          stroke="rgba(130,200,255,0.35)"
           strokeDasharray="4 4"
         />
         <text
@@ -130,7 +130,7 @@ export default function ForecastChart({
           y={lastY - 6}
           fontSize="10"
           fontFamily="JetBrains Mono, monospace"
-          fill="rgba(245,236,214,0.85)"
+          fill="rgba(229,237,251,0.75)"
         >
           NOW · {lastPrice.toFixed(2)}
         </text>
@@ -167,7 +167,7 @@ export default function ForecastChart({
           fontSize="10"
           fontFamily="Orbitron, sans-serif"
           letterSpacing="3"
-          fill="rgba(244,210,122,0.55)"
+          fill="rgba(255,211,107,0.55)"
         >
           PROJECTION · NOT ACTUAL PRICE
         </text>
