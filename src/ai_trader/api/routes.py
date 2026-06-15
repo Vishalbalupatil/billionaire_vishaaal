@@ -191,9 +191,21 @@ def create_session(req: SessionRequest) -> dict:
         raise HTTPException(503, "Broker not initialized")
     try:
         token = _broker.generate_session(req.request_token)
-        return {"access_token": token}
+        return {"access_token": token, "connected": True}
     except Exception as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/auth/status")
+def auth_status() -> dict:
+    """Check if broker is authenticated."""
+    if not _broker:
+        return {"connected": False, "broker": "none"}
+    if hasattr(_broker, "_kite") and hasattr(_broker._kite, "access_token") and _broker._kite.access_token:  # type: ignore[attr-defined]
+        return {"connected": True, "broker": "zerodha"}
+    if hasattr(_broker, "name") and _broker.name == "paper":  # type: ignore[attr-defined]
+        return {"connected": True, "broker": "paper"}
+    return {"connected": False, "broker": getattr(_broker, "name", "unknown")}
 
 
 # --- Database stats ---
