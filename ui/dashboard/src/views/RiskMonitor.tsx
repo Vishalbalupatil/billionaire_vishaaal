@@ -1,235 +1,106 @@
-import type { RiskStatus } from "../api";
+import { useCallback, useState } from "react";
+import { api, RiskResponse, ConfigResponse } from "../api";
+import { usePolling } from "../hooks/usePolling";
 
-function fmt(n: number) {
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
-}
+export default function RiskMonitor() {
+  const riskFetcher = useCallback(() => api.risk(), []);
+  const configFetcher = useCallback(() => api.config(), []);
+  const { data: risk, refresh } = usePolling<RiskResponse>(riskFetcher, 3000);
+  const { data: config } = usePolling<ConfigResponse>(configFetcher, 10000);
+  const [toggling, setToggling] = useState(false);
 
-export default function RiskMonitor({ risk }: { risk: RiskStatus | null }) {
-  if (!risk) {
-    return (
-      <div className="grid">
-        <div className="card hero glow">
-          <div className="eyebrow">NIFTY 50 · RISK MONITOR</div>
-          <h1>Loading…</h1>
-        </div>
-      </div>
-    );
-  }
+  const toggleKillSwitch = async () => {
+    if (!risk) return;
+    setToggling(true);
+    try {
+      await api.killSwitch(!risk.kill_switch, risk.kill_switch ? "Manual deactivation" : "Manual activation");
+      refresh();
+    } finally {
+      setToggling(false);
+    }
+  };
 
-  const lossPct =
-    (-risk.realised_pnl_today / Math.max(1, risk.daily_loss_budget)) * 100;
-  const usedPct = Math.min(100, Math.max(0, lossPct));
+  const maxLoss = (config?.max_capital || 0) * ((config?.max_daily_loss_pct || 5) / 100);
+  const lossUsed = risk ? Math.min(Math.abs(Math.min(risk.daily_pnl, 0)) / maxLoss * 100, 100) : 0;
 
   return (
-    <div className="grid">
-      <div className="card hero glow">
-        <div className="eyebrow">NIFTY 50 · RISK MONITOR</div>
-        <h1>Capital guards · {risk.app_mode.toUpperCase()}</h1>
-        <div className="muted small" style={{ maxWidth: 680, marginTop: 6 }}>
-          Pre-trade gates enforce stop-loss, exposure caps, consecutive-loss
-          cooldowns, and daily drawdown. The kill switch is a master-off; every
-          order checks it before hitting the broker.
-        </div>
-      </div>
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold">Risk Monitor</h2>
 
-      <div className="card two-thirds">
-        <div className="row spread" style={{ marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>DAILY LOSS UTILISATION</h3>
-          <span
-            className={`chip ${
-              usedPct >= 80 ? "red" : usedPct >= 50 ? "amber" : "green"
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`glass-card p-6 text-center ${risk?.kill_switch ? "neon-glow-red" : "neon-glow-green"}`}>
+          <p className="text-xs text-gray-500 uppercase mb-3">Kill Switch</p>
+          <p className={`text-3xl font-bold ${risk?.kill_switch ? "text-neon-red" : "text-neon-green"}`}>
+            {risk?.kill_switch ? "ACTIVE" : "OFF"}
+          </p>
+          <button
+            onClick={toggleKillSwitch}
+            disabled={toggling}
+            className={`mt-4 px-6 py-2 rounded-xl text-sm font-semibold transition-all ${
+              risk?.kill_switch
+                ? "bg-neon-green/20 text-neon-green hover:bg-neon-green/30"
+                : "bg-neon-red/20 text-neon-red hover:bg-neon-red/30"
             }`}
           >
-            {usedPct.toFixed(0)}% used
-          </span>
+            {risk?.kill_switch ? "Deactivate" : "Activate"}
+          </button>
         </div>
-        <div className="row" style={{ gap: 18, alignItems: "center" }}>
-          <RingGauge pct={usedPct} />
-          <div className="col" style={{ flex: 1, gap: 12 }}>
-            <div className="hbar warn">
-              <span style={{ width: `${usedPct}%` }} />
+
+        <div className="glass-card p-6">
+          <p className="text-xs text-gray-500 uppercase mb-3">Daily P&L</p>
+          <p className={`text-3xl font-bold font-mono ${(risk?.daily_pnl || 0) >= 0 ? "text-neon-green" : "text-neon-red"}`}>
+            ₹{(risk?.daily_pnl || 0).toFixed(2)}
+          </p>
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Loss Budget Used</span>
+              <span>{lossUsed.toFixed(1)}%</span>
             </div>
-            <div className="row spread">
-              <div className="col" style={{ gap: 2 }}>
-                <span className="muted tiny">REALISED TODAY</span>
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 16,
-                    color:
-                      risk.realised_pnl_today >= 0
-                        ? "var(--neon-green)"
-                        : "var(--neon-red)",
-                  }}
-                >
-                  ₹ {fmt(risk.realised_pnl_today)}
-                </span>
-              </div>
-              <div className="col" style={{ gap: 2, alignItems: "flex-end" }}>
-                <span className="muted tiny">DAILY LOSS BUDGET</span>
-                <span className="mono" style={{ fontSize: 16 }}>
-                  ₹ {fmt(risk.daily_loss_budget)}
-                </span>
-              </div>
+            <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  lossUsed > 80 ? "bg-neon-red" : lossUsed > 50 ? "bg-neon-yellow" : "bg-neon-green"
+                }`}
+                style={{ width: `${lossUsed}%` }}
+              />
             </div>
+            <p className="text-xs text-gray-600 mt-1">Max: ₹{maxLoss.toFixed(0)}</p>
           </div>
+        </div>
+
+        <div className="glass-card p-6">
+          <p className="text-xs text-gray-500 uppercase mb-3">Trading Status</p>
+          <p className={`text-xl font-bold ${risk?.can_trade ? "text-neon-green" : "text-neon-red"}`}>
+            {risk?.can_trade ? "Active" : "Blocked"}
+          </p>
+          <p className="text-xs text-gray-500 mt-2">{risk?.reason}</p>
+          {risk?.should_square_off && (
+            <div className="mt-3 px-3 py-2 bg-neon-yellow/10 rounded-lg">
+              <p className="text-xs text-neon-yellow font-semibold">Square-off time approaching</p>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="card third">
-        <h3>GUARDS</h3>
-        <Row
-          label="Kill switch"
-          value={risk.kill_switch ? "ENGAGED" : "OFF"}
-          chip={risk.kill_switch ? "red" : "green"}
-        />
-        <Row
-          label="Live unlocked"
-          value={risk.live_trading_enabled ? "YES" : "NO"}
-          chip={risk.live_trading_enabled ? "red" : "green"}
-        />
-        <Row
-          label="Mode"
-          value={risk.app_mode.toUpperCase()}
-          chip={
-            risk.app_mode === "live"
-              ? "red"
-              : risk.app_mode === "paper"
-                ? "amber"
-                : "cyan"
-          }
-        />
-        <Row
-          label="Within market hours"
-          value={risk.within_market_hours ? "YES" : "NO"}
-          chip={risk.within_market_hours ? "green" : ""}
-        />
-        <Row
-          label="Past square-off"
-          value={risk.past_square_off ? "YES" : "NO"}
-          chip={risk.past_square_off ? "amber" : ""}
-        />
-      </div>
-
-      <div className="card half">
-        <h3>COUNTERS</h3>
-        <div className="kpi-row">
-          <div className="stat">
-            <div className="label">Trades today</div>
-            <div className="big">{risk.trades_today}</div>
+      <div className="glass-card p-6">
+        <h3 className="text-sm text-gray-400 mb-4">Risk Parameters</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-gray-500">Capital</p>
+            <p className="font-mono">₹{(config?.max_capital || 0).toLocaleString()}</p>
           </div>
-          <div className="stat">
-            <div className="label">Open positions</div>
-            <div className="big">{risk.open_positions}</div>
+          <div>
+            <p className="text-xs text-gray-500">Risk/Trade</p>
+            <p>{config?.risk_per_trade_pct}%</p>
           </div>
-          <div className={`stat ${risk.consecutive_losses > 0 ? "neg" : ""}`}>
-            <div className="label">Consec. losses</div>
-            <div className="big">{risk.consecutive_losses}</div>
+          <div>
+            <p className="text-xs text-gray-500">Max Daily Loss</p>
+            <p className="text-neon-red">{config?.max_daily_loss_pct}%</p>
           </div>
-          <div className="stat">
-            <div className="label">Slippage</div>
-            <div className="big">5 bps</div>
+          <div>
+            <p className="text-xs text-gray-500">Max Positions</p>
+            <p>{config?.max_open_positions}</p>
           </div>
-        </div>
-      </div>
-
-      <div className="card half">
-        <h3>RULES ENFORCED</h3>
-        <ul className="muted small" style={{ lineHeight: 1.7 }}>
-          <li>
-            <span className="chip red">HARD</span> Stop-loss mandatory on every trade.
-          </li>
-          <li>
-            <span className="chip red">HARD</span> Max daily drawdown auto-locks
-            new entries.
-          </li>
-          <li>
-            <span className="chip amber">SOFT</span> Cooldown after N consecutive
-            losses.
-          </li>
-          <li>
-            <span className="chip cyan">RISK</span> Position size from capital
-            risk % and SL distance.
-          </li>
-          <li>
-            <span className="chip cyan">MODEL</span> Slippage + flat brokerage
-            modelled in P&amp;L.
-          </li>
-          <li>
-            <span className="chip purple">CAPS</span> Separate exposure caps
-            per options-buy / options-sell / futures / equity.
-          </li>
-        </ul>
-      </div>
-
-      <div className="disclaimer">
-        RISK GATES · <strong>NOT A PROFIT GUARANTEE</strong> · Guards reduce tail
-        risk, they do not eliminate it.
-      </div>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  chip,
-}: {
-  label: string;
-  value: string;
-  chip?: string;
-}) {
-  return (
-    <div
-      className="row spread"
-      style={{
-        padding: "8px 0",
-        borderBottom: "1px dashed rgba(130,200,255,0.06)",
-      }}
-    >
-      <span className="muted small">{label}</span>
-      <span className={`chip ${chip ?? ""}`}>{value}</span>
-    </div>
-  );
-}
-
-function RingGauge({ pct }: { pct: number }) {
-  const r = 62;
-  const c = 2 * Math.PI * r;
-  const dash = (pct / 100) * c;
-  const color =
-    pct >= 80 ? "#ff5474" : pct >= 50 ? "#ffd36b" : "#6bff9e";
-  return (
-    <div className="ring-wrap">
-      <svg width="160" height="160" viewBox="0 0 160 160">
-        <circle
-          cx="80"
-          cy="80"
-          r={r}
-          fill="none"
-          stroke="rgba(130,200,255,0.10)"
-          strokeWidth="10"
-        />
-        <circle
-          cx="80"
-          cy="80"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="10"
-          strokeDasharray={`${dash} ${c - dash}`}
-          strokeDashoffset={0}
-          strokeLinecap="round"
-          transform="rotate(-90 80 80)"
-          style={{ filter: `drop-shadow(0 0 6px ${color})` }}
-        />
-      </svg>
-      <div className="ring-label">
-        <div>
-          <div className="big" style={{ color }}>
-            {pct.toFixed(0)}%
-          </div>
-          <div className="sub">of daily budget</div>
         </div>
       </div>
     </div>

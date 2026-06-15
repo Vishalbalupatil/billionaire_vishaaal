@@ -3,11 +3,11 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "billionaire-vishaaal"
-version = "0.1.0"
-description = "AI-assisted trading platform for Indian markets (Zerodha Kite Connect). Decision-support tool - not financial advice."
+name = "ai-trader"
+version = "1.0.0"
+description = "AI-powered Nifty 50 options & equity trading platform for Zerodha. Not financial advice."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Vishal Balupatil" }]
 license = { text = "MIT" }
 dependencies = [
@@ -22,6 +22,9 @@ dependencies = [
     "aiosqlite>=0.19",
     "numpy>=1.26",
     "pandas>=2.1",
+    "scikit-learn>=1.4",
+    "xgboost>=2.0",
+    "scipy>=1.12",
     "pyyaml>=6.0",
     "rich>=13.7",
     "python-dateutil>=2.9",
@@ -40,17 +43,17 @@ dev = [
 ]
 
 [project.scripts]
-billionaire = "billionaire.cli:main"
+ai-trader = "ai_trader.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-billionaire = ["storage/schema.sql", "config/*.yaml"]
+ai_trader = ["storage/schema.sql"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py311"
 extend-exclude = ["ui", "data", "logs"]
 
 [tool.ruff.lint]
@@ -63,7 +66,7 @@ asyncio_mode = "auto"
 addopts = "-q"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 strict_optional = true
 warn_unused_ignores = true
 ignore_missing_imports = true
