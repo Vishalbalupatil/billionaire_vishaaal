@@ -106,7 +106,7 @@ class PaperBroker(BrokerClient):
                     realized = (existing.avg_price - fill_price) * close_qty
                     self._capital += realized
                     new_qty = existing.quantity + request.quantity
-                    new_avg = existing.avg_price if new_qty != 0 else 0
+                    new_avg = existing.avg_price if new_qty < 0 else (fill_price if new_qty > 0 else 0)
                 else:
                     # Adding to a long
                     new_qty = existing.quantity + request.quantity
@@ -118,7 +118,7 @@ class PaperBroker(BrokerClient):
                     realized = (fill_price - existing.avg_price) * close_qty
                     self._capital += realized
                     new_qty = existing.quantity - request.quantity
-                    new_avg = existing.avg_price if new_qty != 0 else 0
+                    new_avg = existing.avg_price if new_qty > 0 else (fill_price if new_qty < 0 else 0)
                 else:
                     # Adding to a short
                     new_qty = existing.quantity - request.quantity

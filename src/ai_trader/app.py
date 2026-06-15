@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -61,10 +62,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     log.info("AI Trader ready — mode=%s capital=₹%.0f", settings.trading_mode.value, settings.max_capital)
 
+    # Start background auto-trading loop
+    loop_task = asyncio.create_task(_auto_trade_loop(auto_trader))
+
     yield
 
+    loop_task.cancel()
     db.close()
     log.info("AI Trader shutdown")
+
+
+async def _auto_trade_loop(auto_trader: object) -> None:
+    """Background loop that calls evaluate_and_trade every 60 seconds."""
+    from ai_trader.execution.scheduler import is_market_open
+
+    log.info("Auto-trading background loop started")
+    while True:
+        try:
+            if is_market_open():
+                # In paper mode without live data, market_data will be empty
+                # and the auto-trader will simply log "scanned 0 stocks".
+                # With live Zerodha data, candle data would be populated here.
+                auto_trader.evaluate_and_trade({})  # type: ignore[attr-defined]
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            log.info("Auto-trading loop stopped")
+            break
+        except Exception:
+            log.exception("Error in auto-trading loop")
+            await asyncio.sleep(60)
 
 
 def create_app() -> FastAPI:

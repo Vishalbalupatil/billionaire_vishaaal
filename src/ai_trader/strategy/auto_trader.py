@@ -19,6 +19,7 @@ from ai_trader.models.domain import (
     Exchange,
     Instrument,
     OrderRequest,
+    OrderStatus,
     OrderType,
     ProductType,
     Side,
@@ -101,10 +102,9 @@ class AutoTrader:
 
             # Also detect patterns and trends
             patterns = detect_patterns(df, symbol)
-            if patterns:
-                self._patterns = [
-                    p for p in self._patterns if p.symbol != symbol
-                ] + patterns
+            self._patterns = [
+                p for p in self._patterns if p.symbol != symbol
+            ] + patterns
 
             trend = analyze_trend(df, symbol)
             self._trends[symbol] = trend
@@ -236,7 +236,7 @@ class AutoTrader:
 
         order = self._broker.place_order(request)
 
-        if order.status.value == "COMPLETE":
+        if order.status in (OrderStatus.COMPLETE, OrderStatus.PENDING):
             self._active_trades[result.symbol] = _ActiveTrade(
                 symbol=result.symbol,
                 side=side.value,
@@ -309,7 +309,11 @@ class AutoTrader:
         )
 
         self._broker.set_price(symbol, trade.last_price)
-        self._broker.place_order(request)
+        order = self._broker.place_order(request)
+
+        if order.status in (OrderStatus.REJECTED, OrderStatus.CANCELLED):
+            self._log(symbol, AutoTradeAction.MONITOR, f"Exit order not filled: {order.message}")
+            return
 
         pnl = trade.unrealized_pnl(trade.last_price)
         self._log(symbol, AutoTradeAction.EXIT, f"Closed @ {trade.last_price:.2f} P&L=₹{pnl:.2f}", pnl=pnl)
