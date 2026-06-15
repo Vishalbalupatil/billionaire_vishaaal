@@ -34,19 +34,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize broker
     if settings.trading_mode == TradingMode.LIVE:
-        from ai_trader.broker.zerodha import ZerodhaClient
-        broker = ZerodhaClient()
+        if settings.live_unlock_phrase != "I_ACCEPT_RISK":
+            log.warning(
+                "LIVE mode requested but unlock phrase not set — falling back to PAPER. "
+                "Set LIVE_UNLOCK_PHRASE=I_ACCEPT_RISK to enable live trading."
+            )
+            broker = PaperBroker(initial_capital=settings.max_capital)
+        else:
+            from ai_trader.broker.zerodha import ZerodhaClient
+            broker = ZerodhaClient()
     else:
         broker = PaperBroker(initial_capital=settings.max_capital)
 
     # Initialize components
     risk_manager = RiskManager()
     engine = StrategyEngine(broker=broker, risk_manager=risk_manager)
+
+    from ai_trader.strategy.auto_trader import AutoTrader
+    auto_trader = AutoTrader(broker=broker, risk_manager=risk_manager)
+
     db = Database()
     db.connect()
 
     # Wire up API dependencies
-    set_dependencies(engine=engine, risk=risk_manager, broker=broker, db=db)
+    set_dependencies(engine=engine, risk=risk_manager, broker=broker, db=db, auto_trader=auto_trader)
 
     log.info("AI Trader ready — mode=%s capital=₹%.0f", settings.trading_mode.value, settings.max_capital)
 

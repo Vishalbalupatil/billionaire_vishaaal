@@ -120,7 +120,7 @@ class RiskManager:
         ist_hour = (now.hour + 5) % 24
         ist_minute = now.minute + 30
         if ist_minute >= 60:
-            ist_hour += 1
+            ist_hour = (ist_hour + 1) % 24
             ist_minute -= 60
 
         sq_parts = self._settings.square_off_time.split(":")

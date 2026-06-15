@@ -82,6 +82,75 @@ export interface Strategy {
   payoff: { spot: number; pnl: number }[];
 }
 
+export interface ScanResult {
+  symbol: string;
+  exchange: string;
+  ltp: number;
+  change_pct: number;
+  scan_type: string;
+  score: number;
+  reasons: string[];
+  entry: number;
+  stop_loss: number;
+  target: number;
+  risk_reward: number;
+  volume_ratio: number;
+  ts: string;
+}
+
+export interface ChartPattern {
+  symbol: string;
+  pattern: string;
+  bias: string;
+  confidence: number;
+  entry_zone: number;
+  stop_loss: number;
+  target: number;
+  description: string;
+  ts: string;
+}
+
+export interface TrendAnalysis {
+  symbol: string;
+  trend_5m: string;
+  trend_15m: string;
+  trend_1h: string;
+  trend_daily: string;
+  overall: string;
+  strength: number;
+  ema_20: number;
+  ema_50: number;
+  ema_200: number;
+  supertrend_signal: number;
+  adx: number;
+  rsi: number;
+}
+
+export interface AutoTraderStatus {
+  active: boolean;
+  active_trades: Record<string, {
+    symbol: string;
+    side: string;
+    entry: number;
+    stop_loss: number;
+    target: number;
+    quantity: number;
+    pnl: number;
+    last_price: number;
+  }>;
+  scan_results_count: number;
+  patterns_count: number;
+  trends_count: number;
+}
+
+export interface AutoTradeLogEntry {
+  symbol: string;
+  action: string;
+  details: string;
+  pnl: number;
+  ts: string;
+}
+
 export const api = {
   health: () => get<HealthResponse>("/health"),
   config: () => get<ConfigResponse>("/config"),
@@ -99,4 +168,10 @@ export const api = {
   tradeStats: () => get<Record<string, unknown>>("/stats"),
   dailyPnl: (days?: number) => get<unknown[]>(`/stats/daily-pnl?days=${days || 30}`),
   signalHistory: (limit?: number) => get<unknown[]>(`/stats/signals?limit=${limit || 50}`),
+  scannerResults: () => get<ScanResult[]>("/scanner/results"),
+  scannerPatterns: () => get<ChartPattern[]>("/scanner/patterns"),
+  scannerTrends: () => get<Record<string, TrendAnalysis>>("/scanner/trends"),
+  autoTraderStatus: () => get<AutoTraderStatus>("/auto-trader/status"),
+  autoTraderTrades: () => get<Record<string, unknown>>("/auto-trader/trades"),
+  autoTraderLog: (limit?: number) => get<AutoTradeLogEntry[]>(`/auto-trader/log?limit=${limit || 50}`),
 };

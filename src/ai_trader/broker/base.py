@@ -49,3 +49,6 @@ class BrokerClient(abc.ABC):
 
     @abc.abstractmethod
     def orders(self) -> list[Order]: ...
+
+    def set_price(self, tradingsymbol: str, price: float) -> None:  # noqa: B027
+        """Set simulated price (only used by paper broker)."""

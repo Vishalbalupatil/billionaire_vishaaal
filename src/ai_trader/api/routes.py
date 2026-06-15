@@ -19,14 +19,22 @@ _engine = None
 _risk = None
 _broker = None
 _db = None
+_auto_trader = None
 
 
-def set_dependencies(engine: Any, risk: Any, broker: Any, db: Any) -> None:
-    global _engine, _risk, _broker, _db
+def set_dependencies(
+    engine: Any,
+    risk: Any,
+    broker: Any,
+    db: Any,
+    auto_trader: Any = None,
+) -> None:
+    global _engine, _risk, _broker, _db, _auto_trader
     _engine = engine
     _risk = risk
     _broker = broker
     _db = db
+    _auto_trader = auto_trader
 
 
 # --- System ---
@@ -210,3 +218,62 @@ def signal_history(limit: int = 50) -> list[dict]:
     if not _db:
         return []
     return _db.get_recent_signals(limit)
+
+
+# =============================================================================
+# Scanner & Auto-Trader endpoints
+# =============================================================================
+
+
+@router.get("/scanner/results")
+def scanner_results() -> list[dict]:
+    """Get latest equity scan results (ranked)."""
+    if not _auto_trader:
+        return []
+    return [r.model_dump() for r in _auto_trader.scan_results]
+
+
+@router.get("/scanner/patterns")
+def scanner_patterns() -> list[dict]:
+    """Get detected chart patterns."""
+    if not _auto_trader:
+        return []
+    return [p.model_dump() for p in _auto_trader.patterns]
+
+
+@router.get("/scanner/trends")
+def scanner_trends() -> dict[str, dict]:
+    """Get trend analysis for scanned symbols."""
+    if not _auto_trader:
+        return {}
+    return {sym: t.model_dump() for sym, t in _auto_trader.trends.items()}
+
+
+@router.get("/auto-trader/status")
+def auto_trader_status() -> dict:
+    """Get auto-trader status overview."""
+    if not _auto_trader:
+        return {"active": False}
+    return {
+        "active": True,
+        "active_trades": _auto_trader.active_trades,
+        "scan_results_count": len(_auto_trader.scan_results),
+        "patterns_count": len(_auto_trader.patterns),
+        "trends_count": len(_auto_trader.trends),
+    }
+
+
+@router.get("/auto-trader/trades")
+def auto_trader_active_trades() -> dict:
+    """Get currently active auto-trades."""
+    if not _auto_trader:
+        return {}
+    return _auto_trader.active_trades
+
+
+@router.get("/auto-trader/log")
+def auto_trader_log(limit: int = 50) -> list[dict]:
+    """Get auto-trader activity log."""
+    if not _auto_trader:
+        return []
+    return [entry.model_dump() for entry in _auto_trader.trade_log[-limit:]]
