@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime
 
 from ai_trader.models.domain import Candle, Tick
@@ -18,6 +18,8 @@ TIMEFRAME_MINUTES = {
     "1h": 60,
 }
 
+MAX_CANDLES_PER_KEY = 240
+
 
 class CandleBuilder:
     """Builds candles from a tick stream for multiple timeframes."""
@@ -27,7 +29,9 @@ class CandleBuilder:
         self._buffers: dict[int, dict[str, _CandleAccumulator]] = defaultdict(
             lambda: {tf: _CandleAccumulator(tf) for tf in self._timeframes}
         )
-        self._completed: list[Candle] = []
+        self._completed: dict[tuple[int, str], deque[Candle]] = defaultdict(
+            lambda: deque(maxlen=MAX_CANDLES_PER_KEY)
+        )
 
     def on_tick(self, tick: Tick) -> list[Candle]:
         """Process a tick and return any completed candles."""
@@ -36,16 +40,16 @@ class CandleBuilder:
             result = acc.add(tick)
             if result:
                 completed.append(result)
-        self._completed.extend(completed)
+                self._completed[(tick.instrument_token, acc.timeframe)].append(result)
         return completed
 
     def get_candles(self, instrument_token: int, timeframe: str, count: int = 100) -> list[Candle]:
         """Get recent completed candles for an instrument/timeframe."""
-        candles = [
-            c for c in self._completed
-            if c.instrument_token == instrument_token and c.timeframe == timeframe
-        ]
-        return candles[-count:]
+        buf = self._completed.get((instrument_token, timeframe))
+        if not buf:
+            return []
+        items = list(buf)
+        return items[-count:]
 
 
 class _CandleAccumulator:

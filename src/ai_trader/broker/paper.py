@@ -101,17 +101,43 @@ class PaperBroker(BrokerClient):
         if existing:
             if request.side == Side.BUY:
                 new_qty = existing.quantity + request.quantity
-                if new_qty != 0:
-                    new_avg = (existing.avg_price * existing.quantity + fill_price * request.quantity) / new_qty
-                else:
-                    new_avg = 0
-                    realized = (fill_price - existing.avg_price) * request.quantity
+                if existing.quantity < 0:
+                    # Closing/reducing a short: P&L = (avg - fill) * closed_qty
+                    closed_qty = min(request.quantity, abs(existing.quantity))
+                    realized = (existing.avg_price - fill_price) * closed_qty
                     self._capital += realized
+                    if new_qty > 0:
+                        new_avg = fill_price
+                    elif new_qty != 0:
+                        new_avg = existing.avg_price
+                    else:
+                        new_avg = 0
+                else:
+                    # Adding to long
+                    if new_qty != 0:
+                        new_avg = (existing.avg_price * existing.quantity + fill_price * request.quantity) / new_qty
+                    else:
+                        new_avg = 0
+                        realized = (fill_price - existing.avg_price) * request.quantity
+                        self._capital += realized
             else:
                 new_qty = existing.quantity - request.quantity
-                realized = (fill_price - existing.avg_price) * request.quantity
-                self._capital += realized
-                new_avg = existing.avg_price if new_qty != 0 else 0
+                if existing.quantity > 0:
+                    # Closing/reducing a long: P&L = (fill - avg) * closed_qty
+                    closed_qty = min(request.quantity, existing.quantity)
+                    realized = (fill_price - existing.avg_price) * closed_qty
+                    self._capital += realized
+                    if new_qty < 0:
+                        new_avg = fill_price
+                    elif new_qty != 0:
+                        new_avg = existing.avg_price
+                    else:
+                        new_avg = 0
+                else:
+                    # Adding to short
+                    total_abs = abs(existing.quantity) + request.quantity
+                    new_avg = (existing.avg_price * abs(existing.quantity) + fill_price * request.quantity) / total_abs
+                    new_avg = round(new_avg, 2)
 
             if new_qty == 0:
                 del self._positions[symbol]
