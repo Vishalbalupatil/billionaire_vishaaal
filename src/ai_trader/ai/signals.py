@@ -5,6 +5,7 @@ to produce actionable trade signals.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime
 
 import pandas as pd
@@ -75,7 +76,8 @@ class SignalGenerator:
 
         # Calculate entry, SL, targets from ATR
         current_price = spot_price or float(candles_df["close"].iloc[-1])
-        atr = float(features_df["atr_14"].iloc[-1]) if "atr_14" in features_df.columns else current_price * 0.01
+        atr_raw = float(features_df["atr_14"].iloc[-1]) if "atr_14" in features_df.columns else None
+        atr = atr_raw if (atr_raw is not None and not math.isnan(atr_raw)) else current_price * 0.01
 
         if direction == SignalDirection.BULLISH:
             entry = current_price
@@ -96,9 +98,9 @@ class SignalGenerator:
         risk_per_unit = abs(entry - stop_loss)
         max_risk = self._settings.max_capital * (self._settings.risk_per_trade_pct / 100)
         suggested_qty = max(1, int(max_risk / risk_per_unit)) if risk_per_unit > 0 else 0
-        # Round to lot size
-        suggested_qty = (suggested_qty // instrument.lot_size) * instrument.lot_size
-        suggested_qty = max(instrument.lot_size, suggested_qty)
+        if suggested_qty > 0:
+            suggested_qty = (suggested_qty // instrument.lot_size) * instrument.lot_size
+            suggested_qty = max(instrument.lot_size, suggested_qty)
 
         reasons = self._build_reasons(features_df, direction, regime)
         expected_rr = abs(target1 - entry) / risk_per_unit if risk_per_unit > 0 else 0

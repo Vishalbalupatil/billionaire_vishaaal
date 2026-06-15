@@ -6,6 +6,8 @@ import Signals from "./views/Signals";
 import Strategies from "./views/Strategies";
 import Positions from "./views/Positions";
 import RiskMonitor from "./views/RiskMonitor";
+import Scanner from "./views/Scanner";
+import AutoTrader from "./views/AutoTrader";
 import Settings from "./views/Settings";
 
 const views: Record<string, () => JSX.Element> = {
@@ -14,6 +16,8 @@ const views: Record<string, () => JSX.Element> = {
   strategies: Strategies,
   positions: Positions,
   risk: RiskMonitor,
+  scanner: Scanner,
+  autotrader: AutoTrader,
   settings: Settings,
 };
 

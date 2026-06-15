@@ -6,6 +6,8 @@ interface SidebarProps {
 const items = [
   { id: "overview", label: "Overview", icon: "📊" },
   { id: "signals", label: "AI Signals", icon: "🧠" },
+  { id: "scanner", label: "Equity Scanner", icon: "🔍" },
+  { id: "autotrader", label: "Auto Trader", icon: "🤖" },
   { id: "strategies", label: "Strategies", icon: "📈" },
   { id: "positions", label: "Positions", icon: "💼" },
   { id: "risk", label: "Risk Monitor", icon: "🛡️" },
@@ -19,7 +21,7 @@ export default function Sidebar({ active, onNavigate }: SidebarProps) {
         <h1 className="text-2xl font-bold bg-gradient-to-r from-neon-green to-neon-blue bg-clip-text text-transparent">
           AI Trader
         </h1>
-        <p className="text-xs text-gray-500 mt-1">Nifty 50 Options</p>
+        <p className="text-xs text-gray-500 mt-1">Nifty 50 + Equity Scanner</p>
       </div>
       <nav className="flex-1 px-3">
         {items.map((item) => (

@@ -100,18 +100,29 @@ class PaperBroker(BrokerClient):
         existing = self._positions.get(symbol)
         if existing:
             if request.side == Side.BUY:
-                new_qty = existing.quantity + request.quantity
-                if new_qty != 0:
-                    new_avg = (existing.avg_price * existing.quantity + fill_price * request.quantity) / new_qty
-                else:
-                    new_avg = 0
-                    realized = (fill_price - existing.avg_price) * request.quantity
+                if existing.quantity < 0:
+                    # Closing a short: P&L = (avg - fill) * qty_closed
+                    close_qty = min(request.quantity, abs(existing.quantity))
+                    realized = (existing.avg_price - fill_price) * close_qty
                     self._capital += realized
+                    new_qty = existing.quantity + request.quantity
+                    new_avg = existing.avg_price if new_qty < 0 else (fill_price if new_qty > 0 else 0)
+                else:
+                    # Adding to a long
+                    new_qty = existing.quantity + request.quantity
+                    new_avg = (existing.avg_price * existing.quantity + fill_price * request.quantity) / new_qty
             else:
-                new_qty = existing.quantity - request.quantity
-                realized = (fill_price - existing.avg_price) * request.quantity
-                self._capital += realized
-                new_avg = existing.avg_price if new_qty != 0 else 0
+                if existing.quantity > 0:
+                    # Closing a long: P&L = (fill - avg) * qty_closed
+                    close_qty = min(request.quantity, existing.quantity)
+                    realized = (fill_price - existing.avg_price) * close_qty
+                    self._capital += realized
+                    new_qty = existing.quantity - request.quantity
+                    new_avg = existing.avg_price if new_qty > 0 else (fill_price if new_qty < 0 else 0)
+                else:
+                    # Adding to a short
+                    new_qty = existing.quantity - request.quantity
+                    new_avg = (existing.avg_price * abs(existing.quantity) + fill_price * request.quantity) / abs(new_qty) if new_qty != 0 else 0
 
             if new_qty == 0:
                 del self._positions[symbol]

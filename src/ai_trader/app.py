@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -34,26 +35,62 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize broker
     if settings.trading_mode == TradingMode.LIVE:
-        from ai_trader.broker.zerodha import ZerodhaClient
-        broker = ZerodhaClient()
+        if settings.live_unlock_phrase != "I_ACCEPT_RISK":
+            log.warning(
+                "LIVE mode requested but unlock phrase not set — falling back to PAPER. "
+                "Set LIVE_UNLOCK_PHRASE=I_ACCEPT_RISK to enable live trading."
+            )
+            broker = PaperBroker(initial_capital=settings.max_capital)
+        else:
+            from ai_trader.broker.zerodha import ZerodhaClient
+            broker = ZerodhaClient()
     else:
         broker = PaperBroker(initial_capital=settings.max_capital)
 
     # Initialize components
     risk_manager = RiskManager()
     engine = StrategyEngine(broker=broker, risk_manager=risk_manager)
+
+    from ai_trader.strategy.auto_trader import AutoTrader
+    auto_trader = AutoTrader(broker=broker, risk_manager=risk_manager)
+
     db = Database()
     db.connect()
 
     # Wire up API dependencies
-    set_dependencies(engine=engine, risk=risk_manager, broker=broker, db=db)
+    set_dependencies(engine=engine, risk=risk_manager, broker=broker, db=db, auto_trader=auto_trader)
 
     log.info("AI Trader ready — mode=%s capital=₹%.0f", settings.trading_mode.value, settings.max_capital)
 
+    # Start background auto-trading loop
+    loop_task = asyncio.create_task(_auto_trade_loop(auto_trader))
+
     yield
 
+    loop_task.cancel()
     db.close()
     log.info("AI Trader shutdown")
+
+
+async def _auto_trade_loop(auto_trader: object) -> None:
+    """Background loop that calls evaluate_and_trade every 60 seconds."""
+    from ai_trader.execution.scheduler import is_market_open
+
+    log.info("Auto-trading background loop started")
+    while True:
+        try:
+            if is_market_open():
+                # In paper mode without live data, market_data will be empty
+                # and the auto-trader will simply log "scanned 0 stocks".
+                # With live Zerodha data, candle data would be populated here.
+                auto_trader.evaluate_and_trade({})  # type: ignore[attr-defined]
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            log.info("Auto-trading loop stopped")
+            break
+        except Exception:
+            log.exception("Error in auto-trading loop")
+            await asyncio.sleep(60)
 
 
 def create_app() -> FastAPI:
