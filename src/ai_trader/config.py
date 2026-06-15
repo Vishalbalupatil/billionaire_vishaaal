@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Trading
     trading_mode: TradingMode = TradingMode.PAPER
-    live_unlock_phrase: str = "I_ACCEPT_RISK"
+    live_unlock_phrase: str = ""
 
     # Capital & Risk
     max_capital: float = 100_000.0

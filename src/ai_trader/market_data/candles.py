@@ -18,7 +18,7 @@ TIMEFRAME_MINUTES = {
     "1h": 60,
 }
 
-MAX_CANDLES_PER_KEY = 240
+MAX_CANDLES_PER_KEY = 400
 
 
 class CandleBuilder:
