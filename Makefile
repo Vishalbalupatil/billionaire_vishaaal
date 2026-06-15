@@ -1,42 +1,36 @@
-PY ?= python3
-VENV ?= .venv
-PIP = $(VENV)/bin/pip
-PYTHON = $(VENV)/bin/python
+.PHONY: install dev serve train test lint typecheck ui build
 
-.PHONY: venv install dev lint test run ui-install ui-dev backtest clean
+install:
+	pip install -e ".[dev]"
 
-venv:
-	$(PY) -m venv $(VENV)
-
-install: venv
-	$(PIP) install --upgrade pip
-	$(PIP) install -e ".[dev]"
-
-lint:
-	$(VENV)/bin/ruff check src tests
-	$(VENV)/bin/ruff format --check src tests
-
-fmt:
-	$(VENV)/bin/ruff format src tests
-	$(VENV)/bin/ruff check --fix src tests
-
-test:
-	$(VENV)/bin/pytest
-
-run:
-	$(VENV)/bin/uvicorn billionaire.app:app --host $${API_HOST:-0.0.0.0} --port $${API_PORT:-8000} --reload
-
-backtest:
-	$(PYTHON) scripts/run_sample_backtest.py
-
-ui-install:
+dev: install
 	cd ui/dashboard && npm install
 
-ui-dev:
+serve:
+	python -m ai_trader.cli serve --reload
+
+train:
+	python -m ai_trader.cli train
+
+status:
+	python -m ai_trader.cli status
+
+test:
+	pytest tests/ -q
+
+lint:
+	ruff check src/ tests/
+
+lint-fix:
+	ruff check --fix src/ tests/
+
+typecheck:
+	mypy src/ai_trader/
+
+ui:
 	cd ui/dashboard && npm run dev
 
-ui-build:
+build-ui:
 	cd ui/dashboard && npm run build
 
-clean:
-	rm -rf $(VENV) build dist *.egg-info .pytest_cache .ruff_cache .mypy_cache
+build: install build-ui

@@ -1,65 +1,62 @@
-from billionaire.execution.paper_broker import PaperBroker
-from billionaire.models import (
+"""Tests for the paper trading broker."""
+
+from ai_trader.broker.paper import PaperBroker
+from ai_trader.models.domain import (
     Exchange,
     Instrument,
     OrderRequest,
     OrderStatus,
-    OrderType,
-    ProductType,
-    Segment,
     Side,
 )
 
 
-def _inst() -> Instrument:
+def _nifty_instrument() -> Instrument:
     return Instrument(
-        instrument_token=12345,
-        tradingsymbol="TEST",
-        exchange=Exchange.NSE,
-        segment=Segment.EQUITY,
-        lot_size=1,
+        instrument_token=256265,
+        tradingsymbol="NIFTY22000CE",
+        exchange=Exchange.NFO,
     )
 
 
-def test_market_order_fills_at_ltp():
-    pb = PaperBroker()
-    pb.on_ltp(12345, 100.0)
-    req = OrderRequest(
-        instrument=_inst(),
-        side=Side.BUY,
-        quantity=10,
-        order_type=OrderType.MARKET,
-        product=ProductType.MIS,
-    )
-    order = pb.place_order(req)
-    assert order.status == OrderStatus.COMPLETE
-    assert order.filled_qty == 10
-    assert order.avg_price > 0
-    positions = pb.positions()
-    assert len(positions) == 1 and positions[0].quantity == 10
+def test_paper_buy_and_sell():
+    broker = PaperBroker(initial_capital=100000)
+    inst = _nifty_instrument()
+    broker.set_price("NIFTY22000CE", 200.0)
+
+    # Buy
+    buy_req = OrderRequest(instrument=inst, side=Side.BUY, quantity=25)
+    buy_order = broker.place_order(buy_req)
+    assert buy_order.status == OrderStatus.COMPLETE
+    assert buy_order.filled_qty == 25
+
+    # Check position
+    positions = broker.positions()
+    assert len(positions) == 1
+    assert positions[0].quantity == 25
+
+    # Sell
+    broker.set_price("NIFTY22000CE", 220.0)
+    sell_req = OrderRequest(instrument=inst, side=Side.SELL, quantity=25)
+    sell_order = broker.place_order(sell_req)
+    assert sell_order.status == OrderStatus.COMPLETE
+
+    # Position should be closed
+    positions = broker.positions()
+    assert len(positions) == 0
+
+    # Should have made profit
+    assert broker.pnl > 0
 
 
-def test_limit_order_fills_when_price_touches():
-    pb = PaperBroker()
-    pb.on_ltp(12345, 100.0)
-    req = OrderRequest(
-        instrument=_inst(),
-        side=Side.BUY,
-        quantity=5,
-        order_type=OrderType.LIMIT,
-        limit_price=99.0,
-        product=ProductType.MIS,
-    )
-    order = pb.place_order(req)
-    assert order.status == OrderStatus.OPEN
-    pb.on_ltp(12345, 98.5)  # crosses limit
-    assert pb._orders[order.order_id].status == OrderStatus.COMPLETE
+def test_paper_reject_no_price():
+    broker = PaperBroker()
+    inst = _nifty_instrument()
+    req = OrderRequest(instrument=inst, side=Side.BUY, quantity=25)
+    order = broker.place_order(req)
+    assert order.status == OrderStatus.REJECTED
 
 
-def test_position_closes_on_opposite_fill():
-    pb = PaperBroker()
-    pb.on_ltp(12345, 100.0)
-    inst = _inst()
-    pb.place_order(OrderRequest(instrument=inst, side=Side.BUY, quantity=10, order_type=OrderType.MARKET))
-    pb.place_order(OrderRequest(instrument=inst, side=Side.SELL, quantity=10, order_type=OrderType.MARKET))
-    assert len(pb.positions()) == 0
+def test_paper_margins():
+    broker = PaperBroker(initial_capital=500000)
+    margins = broker.margins()
+    assert margins["equity"]["available"]["live_balance"] == 500000

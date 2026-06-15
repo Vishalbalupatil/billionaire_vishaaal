@@ -1,55 +1,44 @@
-import type { HealthResp, RiskStatus } from "../api";
-import { api } from "../api";
+import { useCallback } from "react";
+import { api, HealthResponse } from "../api";
+import { usePolling } from "../hooks/usePolling";
 
-export default function TopBar({
-  health,
-  risk,
-  onAskAI,
-}: {
-  health: HealthResp | null;
-  risk: RiskStatus | null;
-  onAskAI?: () => void;
-}) {
-  const mode = health?.mode ?? "analysis";
-  const wsConnected = health?.websocket?.connected;
-  const killed = risk?.kill_switch;
+export default function TopBar() {
+  const fetcher = useCallback(() => api.health(), []);
+  const { data } = usePolling<HealthResponse>(fetcher, 3000);
 
-  const killToggle = async () => {
-    if (killed) await api.release();
-    else await api.kill("dashboard");
-  };
+  const session = data?.session;
+  const mode = data?.mode || "...";
+  const modeColor =
+    mode === "live" ? "text-neon-red" : mode === "paper" ? "text-neon-yellow" : "text-neon-blue";
 
   return (
-    <>
-      <div className="row" style={{ gap: 14 }}>
-        <span className={`badge mode-${mode}`}>MODE · {mode.toUpperCase()}</span>
-        <span className="status-pill">
-          <span className={`dot ${wsConnected ? "green" : "red"}`} />
-          ws {wsConnected ? "live" : "offline"}
+    <header className="h-14 bg-dark-800/50 border-b border-dark-600/30 flex items-center justify-between px-6">
+      <div className="flex items-center gap-6">
+        <span className={`text-sm font-semibold uppercase ${modeColor}`}>
+          {mode} mode
         </span>
-        <span className="status-pill">
-          <span className="dot amber" /> {health?.broker ?? "—"}
-        </span>
-        {risk && (
-          <span className="status-pill">
-            {risk.within_market_hours ? "market open" : "market closed"}
-            {" · "}sq-off {risk.past_square_off ? "reached" : "pending"}
+        {session?.market_open && (
+          <span className="flex items-center gap-1.5 text-xs text-neon-green">
+            <span className="w-2 h-2 rounded-full bg-neon-green animate-pulse" />
+            Market Open
           </span>
         )}
-      </div>
-      <div className="row">
-        {onAskAI && (
-          <button className="btn primary" onClick={onAskAI}>
-            Ask Nifty AI
-          </button>
+        {session && !session.market_open && (
+          <span className="text-xs text-gray-500">Market Closed</span>
         )}
-        <button className="btn" onClick={() => api.squareOff()}>
-          Square-off All
-        </button>
-        <button className={`btn ${killed ? "primary" : "danger"}`} onClick={killToggle}>
-          {killed ? "Release Kill Switch" : "Kill Switch"}
-        </button>
       </div>
-    </>
+      <div className="flex items-center gap-6 text-xs text-gray-400">
+        {session && (
+          <>
+            <span>IST {session.ist_time}</span>
+            <span>{session.day}</span>
+            {session.expiry_day && (
+              <span className="text-neon-yellow font-semibold">EXPIRY DAY</span>
+            )}
+            <span>Next expiry: {session.next_expiry}</span>
+          </>
+        )}
+      </div>
+    </header>
   );
 }

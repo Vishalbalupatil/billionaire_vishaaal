@@ -1,81 +1,76 @@
-import pytest
+"""Tests for risk management."""
 
-from billionaire.config import get_settings
-from billionaire.models import (
+import os
+
+os.environ["MAX_CAPITAL"] = "100000"
+os.environ["MAX_DAILY_LOSS_PCT"] = "5"
+
+from ai_trader.models.domain import (
     Exchange,
     Instrument,
     MarketRegime,
-    Segment,
-    SetupType,
     Signal,
     SignalDirection,
 )
-from billionaire.risk.risk_manager import RiskManager
+from ai_trader.risk.manager import RiskManager
 
 
-def _signal(entry=100.0, sl=98.0, t1=104.0, strategy="test") -> Signal:
+def _signal(confidence: float = 0.7, risk: float = 1000) -> Signal:
     return Signal(
-        instrument=Instrument(
-            instrument_token=1, tradingsymbol="X", exchange=Exchange.NSE, segment=Segment.EQUITY
-        ),
-        setup=SetupType.MOMENTUM_BREAKOUT,
+        instrument=Instrument(instrument_token=0, tradingsymbol="NIFTY", exchange=Exchange.NSE),
         direction=SignalDirection.BULLISH,
-        entry=entry,
-        stop_loss=sl,
-        target1=t1,
-        confidence=0.6,
+        entry=22000,
+        stop_loss=21960,
+        target1=22080,
+        confidence=confidence,
         regime=MarketRegime.TRENDING_UP,
-        strategy=strategy,
-        expected_rr=2.0,
+        strategy_name="test",
+        risk_rupees=risk,
     )
 
 
-def test_position_size_respects_risk_budget():
-    rm = RiskManager(get_settings())
-    qty = rm.position_size(entry=100.0, stop_loss=98.0)
-    # capital 100k * 0.75% = 750 risk budget; risk_per_unit 2 -> qty 375
-    assert qty == 375
+def test_can_trade_initially():
+    rm = RiskManager()
+    can, reason = rm.can_trade()
+    assert can is True
 
 
-def test_kill_switch_blocks():
-    rm = RiskManager(get_settings())
-    rm.engage_kill_switch("test")
-    d = rm.check_signal(_signal())
-    assert not d.allowed
+def test_kill_switch():
+    rm = RiskManager()
+    rm.activate_kill_switch("test")
+    assert rm.kill_switch_active
+    can, _ = rm.can_trade()
+    assert can is False
+
+    rm.deactivate_kill_switch()
+    assert not rm.kill_switch_active
 
 
-def test_max_trades_per_day(monkeypatch):
-    monkeypatch.setenv("MAX_TRADES_PER_DAY", "1")
-    from billionaire.config import settings as _m
-
-    _m.get_settings.cache_clear()
-    s = _m.get_settings()
-    rm = RiskManager(s)
-    rm.register_trade_closed(50.0, "X")
-    d = rm.check_signal(_signal())
-    # outside market hours most of the time in CI, so this may fail with 'outside market hours' for live,
-    # but with live=False it should still be allowed until trade cap is hit.
-    assert not d.allowed or d.allowed  # tolerate time-of-day differences
-    assert rm.status()["trades_today"] == 1
+def test_daily_loss_limit():
+    rm = RiskManager()
+    rm.update_daily_pnl(-6000)  # > 5% of 100k
+    assert rm.kill_switch_active
 
 
-def test_cooldown_after_loss_streak(monkeypatch):
-    monkeypatch.setenv("COOLDOWN_AFTER_LOSSES", "2")
-    from billionaire.config import settings as _m
-
-    _m.get_settings.cache_clear()
-    rm = RiskManager(_m.get_settings())
-    rm.register_trade_closed(-100.0, "X")
-    rm.register_trade_closed(-100.0, "X")
-    d = rm.check_signal(_signal())
-    assert not d.allowed
-    assert any("Cooldown" in r for r in d.reasons)
+def test_validate_signal():
+    rm = RiskManager()
+    sig = _signal(confidence=0.7, risk=1000)
+    ok, _ = rm.validate_signal(sig, [])
+    assert ok is True
 
 
-@pytest.mark.parametrize("sl", [99.9999])
-def test_zero_size_denied(sl):
-    rm = RiskManager(get_settings())
-    d = rm.check_signal(_signal(entry=100.0, sl=sl))
-    # risk per unit is tiny -> qty explodes then trimmed; but when sl == entry we should block
-    if abs(100 - sl) < 1e-6:
-        assert not d.allowed
+def test_validate_signal_low_confidence():
+    rm = RiskManager()
+    sig = _signal(confidence=0.3)
+    ok, reason = rm.validate_signal(sig, [])
+    assert ok is False
+    assert "Confidence" in reason
+
+
+def test_reset_daily():
+    rm = RiskManager()
+    rm.update_daily_pnl(-6000)
+    assert rm.kill_switch_active
+    rm.reset_daily()
+    assert not rm.kill_switch_active
+    assert rm.daily_pnl == 0
